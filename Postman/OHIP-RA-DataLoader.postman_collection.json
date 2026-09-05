@@ -1,0 +1,723 @@
+{
+  "info": {
+    "_postman_id": "opera-ra-dataloader-collection",
+    "name": "OPERA R&A Data Loader — OHIP GraphQL",
+    "description": "# OPERA R&A Data Loader — OHIP GraphQL API Test Collection\n\nCovers all 6 data domains extracted by the OperaRADataLoader project:\n1. **Auth** — OAuth2 token (OCIM)\n2. **RES** — StatisticsReservationsDaily\n3. **FIN** — FinancialTransactionDetails\n4. **OTB** — StatisticsForecastSummary\n5. **DIM** — FinancialTransactionCodes, RatesCodeDetails, InventoryRooms, ExportMappings\n6. **RMN/OOO** — InventoryRooms, StatisticsManagersReport\n\n## Setup\n1. Import `OHIP-RA-DataLoader.postman_environment.json`\n2. Fill in all `CHANGE_ME` values\n3. Run **01 – Get OAuth Token** first — token auto-saves to `{{bearerToken}}`\n4. Run remaining requests in order\n\n## Field Verification\nUse **Introspect — [SubjectArea]** requests to confirm exact GraphQL field names\nagainst your live OHIP environment before implementation.\n\n> GenAI-generated — reviewed and approved by: __________ __________",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{bearerToken}}", "type": "string" }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request: add x-request-id to every request",
+          "pm.request.headers.add({ key: 'x-request-id', value: pm.variables.replaceIn('{{$guid}}') });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 – Authentication",
+      "item": [
+        {
+          "name": "01 – Get OAuth Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('access_token present', () => pm.expect(json.access_token).to.be.a('string'));",
+                  "pm.collectionVariables.set('bearerToken', json.access_token);",
+                  "const expiresAt = Date.now() + (json.expires_in - 60) * 1000;",
+                  "pm.collectionVariables.set('tokenExpiresAt', expiresAt);",
+                  "console.log('Token saved. Expires in', json.expires_in, 's');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" },
+              { "key": "x-app-key", "value": "{{appKey}}" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",    "value": "client_credentials" },
+                { "key": "client_id",     "value": "{{clientId}}" },
+                { "key": "client_secret", "value": "{{clientSecret}}" },
+                { "key": "scope",         "value": "urn:opc:hgbu:ws:_myscopes_" }
+              ]
+            },
+            "url": "{{gatewayUrl}}/oauth/token",
+            "description": "Obtains an OAuth2 bearer token using client_credentials grant.\nToken is automatically stored in {{bearerToken}} collection variable.\n\nScope is always: urn:opc:hgbu:ws:_myscopes_"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 – RES (StatisticsReservationsDaily)",
+      "description": "CSV: {RESORT}_OPERA_RES_{yyyymmdd}.csv\nDB Table: RESERVATION_STAT_DAILY\nSubject Area: StatisticsReservationsDaily",
+      "item": [
+        {
+          "name": "RES – Reservation Stats Daily",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Auto-refresh token if expired",
+                  "const expiresAt = pm.collectionVariables.get('tokenExpiresAt');",
+                  "if (!expiresAt || Date.now() > expiresAt) {",
+                  "    console.warn('Token expired or missing — run 01-Get OAuth Token first');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('No GraphQL errors (or partial)', () => {",
+                  "    if (json.errors) {",
+                  "        console.warn('GraphQL partial errors:', JSON.stringify(json.errors));",
+                  "    }",
+                  "    pm.expect(json.data).to.not.be.null;",
+                  "});",
+                  "const rows = json.data?.statisticsReservationsDaily?.reservationDailyStatisticsDetails;",
+                  "pm.test('reservationDailyStatisticsDetails array present', () => {",
+                  "    pm.expect(rows).to.be.an('array');",
+                  "});",
+                  "if (rows && rows.length > 0) {",
+                  "    console.log('Row count:', rows.length);",
+                  "    console.log('Sample row:', JSON.stringify(rows[0]));",
+                  "    // Verify key join field",
+                  "    pm.test('resvNameId present in rows', () => {",
+                  "        pm.expect(rows[0]).to.have.property('resvNameId');",
+                  "    });",
+                  "} else {",
+                  "    console.warn('No data returned — check date range and hotel code');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query StatisticsReservationsDaily($input: StatisticsReservationsDailyQueryArgumentsType!) {\\n  statisticsReservationsDaily(input: $input) {\\n    reservationDailyStatisticsDetails {\\n      businessDate\\n      resort\\n      resvNameId\\n      rateCode\\n      rateCategory\\n      marketCode\\n      sourceCode\\n      channel\\n      truncBeginDate\\n      truncEndDate\\n      room\\n      pseudoRoomYn\\n      roomCategoryLabel\\n      resvStatus\\n      quantity\\n      adults\\n      children\\n      stayRooms\\n      stayPersons\\n      stayAdults\\n      stayChildren\\n      arrRooms\\n      arrPersons\\n      depRooms\\n      depPersons\\n      dayUseRooms\\n      dayUsePersons\\n      houseUseYn\\n      complimentaryYn\\n      walkinYn\\n      noShowRooms\\n      noShowPersons\\n      cancellationDate\\n      country\\n      nights\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"reservationDailyStatisticsDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"reservationDailyStatisticsDetailsBusinessDate\": {\n        \"_gte\": \"{{startDate}}\",\n        \"_lte\": \"{{endDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches daily reservation statistics.\n\n**Key fields:**\n- `resvNameId` — join key to FIN\n- `roomCategoryLabel` — room type label (DB: ROOM_CATEGORY_LABEL)\n- `stayRooms`, `arrRooms`, `depRooms` — occupancy counts\n\n**Verify field names** via Introspect request if any field returns error."
+          }
+        },
+        {
+          "name": "RES – Introspect Schema Fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "const fields = json.data?.__type?.fields;",
+                  "if (fields) {",
+                  "    console.log('=== ReservationDailyStatisticsDetails fields ===');",
+                  "    fields.forEach(f => console.log(f.name, ':', f.type?.name || f.type?.ofType?.name));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ __type(name: \\\"ReservationDailyStatisticsDetailsType\\\") { fields { name type { name kind ofType { name } } } } }\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Introspects the GraphQL schema for StatisticsReservationsDaily primary view.\nRun this to confirm exact field names in your environment.\nField names printed to Postman Console."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 – FIN (FinancialTransactionDetails)",
+      "description": "CSV: {RESORT}_OPERA_FIN_{yyyymmdd}.csv\nDB Table: FINANCIAL_TRANSACTIONS\nSubject Area: FinancialTransactionDetails",
+      "item": [
+        {
+          "name": "FIN – Financial Transaction Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "pm.test('data present', () => pm.expect(json.data).to.not.be.null);",
+                  "const rows = json.data?.financialTransactionDetails?.financialTransactionDetails;",
+                  "pm.test('financialTransactionDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows && rows.length > 0) {",
+                  "    console.log('Row count:', rows.length);",
+                  "    console.log('Sample row:', JSON.stringify(rows[0]));",
+                  "    // Check for late postings",
+                  "    const late = rows.filter(r => r.trxDate > r.businessDate);",
+                  "    if (late.length > 0) console.warn('Late postings found:', late.length);",
+                  "    pm.test('resvNameId present (join key)', () => pm.expect(rows[0]).to.have.property('resvNameId'));",
+                  "    pm.test('ftSubtype present', () => pm.expect(rows[0]).to.have.property('ftSubtype'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query FinancialTransactionDetails($input: FinancialTransactionDetailsQueryArgumentsType!) {\\n  financialTransactionDetails(input: $input) {\\n    financialTransactionDetails {\\n      businessDate\\n      resort\\n      resvNameId\\n      originalResvNameId\\n      rateCode\\n      sourceCode\\n      ftSubtype\\n      tcGroup\\n      tcSubgroup\\n      trxCode\\n      trxDate\\n      netAmount\\n      grossAmount\\n      trxAmount\\n      postedAmount\\n      quantity\\n      pricePerUnit\\n      revenueAmt\\n      passerByName\\n      trxNoAddedBy\\n      trxNo\\n      tranActionId\\n      marketCode\\n      exchangeRate\\n      currencyCode\\n      indRevenueGp\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"financialTransactionDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"financialTransactionDetailsBusinessDate\": {\n        \"_gte\": \"{{startDate}}\",\n        \"_lte\": \"{{endDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches financial transactions for a business date range.\n\n**Key fields:**\n- `resvNameId` — join key to RES\n- `ftSubtype` — C=Charge, FC=Payment, PK=Package\n- `indRevenueGp` — Y/N revenue flag\n- `tcGroup` / `tcSubgroup` / `trxCode` — transaction classification\n\n**Late posting detection:** `trxDate > businessDate`\n\n**Note:** COSTCENTER/ACCOUNT (BOF codes) not available in this SA — use ExportMappings SA."
+          }
+        },
+        {
+          "name": "FIN – Introspect Schema Fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const fields = json.data?.__type?.fields;",
+                  "if (fields) {",
+                  "    console.log('=== FinancialTransactionDetails fields ===');",
+                  "    fields.forEach(f => console.log(f.name, ':', f.type?.name || f.type?.ofType?.name));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ __type(name: \\\"FinancialTransactionDetailsType\\\") { fields { name type { name kind ofType { name } } } } }\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 – OTB (StatisticsForecastSummary)",
+      "description": "CSV: {RESORT}_OPERA_OTB_{yyyymmdd}.csv\nDB Table: RESERVATION_NAME\nSubject Area: StatisticsForecastSummary\nSnapshotDate = BusinessDate (set by loader). ConsideredDate = stayDate (future).",
+      "item": [
+        {
+          "name": "OTB – Forecast Summary (On The Books)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "pm.test('data present', () => pm.expect(json.data).to.not.be.null);",
+                  "const rows = json.data?.statisticsForecastSummary?.forecastSummaryDetails;",
+                  "pm.test('forecastSummaryDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows && rows.length > 0) {",
+                  "    console.log('Row count:', rows.length);",
+                  "    console.log('Sample row:', JSON.stringify(rows[0]));",
+                  "    // Verify ConsideredDate (stayDate) present",
+                  "    pm.test('stayDate present (ConsideredDate)', () => pm.expect(rows[0]).to.have.property('stayDate'));",
+                  "    pm.test('roomRevenue present', () => pm.expect(rows[0]).to.have.property('roomRevenue'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query StatisticsForecastSummary($input: StatisticsForecastSummaryQueryArgumentsType!) {\\n  statisticsForecastSummary(input: $input) {\\n    forecastSummaryDetails {\\n      resort\\n      stayDate\\n      eventType\\n      roomCategoryLabel\\n      marketCode\\n      sourceCode\\n      rateCode\\n      rateCategory\\n      resvType\\n      dayUseYn\\n      arrRooms\\n      adults\\n      children\\n      depRooms\\n      noRooms\\n      arrPersons\\n      depPersons\\n      dayUseRooms\\n      dayUsePersons\\n      quantity\\n      nights\\n      resvStatus\\n      channel\\n      country\\n      currencyCode\\n      truncBeginDate\\n      truncEndDate\\n      grossRate\\n      netRoomRevenue\\n      extraRevenue\\n      roomRevenue\\n      roomRevenueTax\\n      foodRevenue\\n      foodRevenueTax\\n      otherRevenue\\n      otherRevenueTax\\n      totalRevenue\\n      totalRevenueTax\\n      nonRevenue\\n      nonRevenueTax\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"forecastSummaryDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"forecastSummaryDetailsStayDate\": {\n        \"_gte\": \"{{otbStartDate}}\",\n        \"_lte\": \"{{otbEndDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches OTB (On The Books) forecast snapshot.\n\n**Key mapping:**\n- `stayDate` → CONSIDERED_DATE (future event date)\n- `SNAPSHOT_DATE` is set by the loader to the current BusinessDate — NOT from API\n- `roomRevenue`, `totalRevenue` — revenue on books\n\n**Use {{otbStartDate}} / {{otbEndDate}}** for the future ConsideredDate range\n(typically BusinessDate+1 to BusinessDate+365)."
+          }
+        },
+        {
+          "name": "OTB – Reservation Pace (Snapshot History)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.statisticsReservationPace?.reservationPaceFactDetails;",
+                  "if (rows) console.log('Pace rows:', rows.length, '— Sample:', JSON.stringify(rows[0]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query StatisticsReservationPace($input: StatisticsReservationPaceQueryArgumentsType!) {\\n  statisticsReservationPace(input: $input) {\\n    reservationPaceFactDetails {\\n      resort\\n      snapshotDate\\n      stayDate\\n      marketCode\\n      roomCategoryLabel\\n      channel\\n      rateCode\\n      roomsOnBooks\\n      revenueOnBooks\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"reservationPaceFactDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"reservationPaceFactDetailsSnapshotDate\": { \"_eq\": \"{{startDate}}\" },\n      \"reservationPaceFactDetailsStayDate\": {\n        \"_gte\": \"{{otbStartDate}}\",\n        \"_lte\": \"{{otbEndDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches Reservation Pace for a specific SnapshotDate.\nUsed for pace comparison — how many rooms were on books as of a past snapshot date.\n\n`snapshotDate` = the historical date to compare FROM\n`stayDate` = future stay dates to look at"
+          }
+        },
+        {
+          "name": "OTB – Introspect ForecastSummary Fields",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "const fields = json.data?.__type?.fields;",
+                  "if (fields) {",
+                  "    console.log('=== ForecastSummaryDetails fields ===');",
+                  "    fields.forEach(f => console.log(f.name, ':', f.type?.name || f.type?.ofType?.name));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"{ __type(name: \\\"ForecastSummaryDetailsType\\\") { fields { name type { name kind ofType { name } } } } }\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 – DIM (Master Data)",
+      "description": "CSV: {RESORT}_OPERA_DIM_{yyyymmdd}.csv\nCovers TC_CODE, TC_GROUP, ROOM_TYPE, RATE_CODE, CHANNEL, MARKETCODE, SOURCE_CODE",
+      "item": [
+        {
+          "name": "DIM – Transaction Codes (TC_CODE / TC_GROUP / TC_SUBGROUP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.financialTransactionCodes?.transactionCodeDetails;",
+                  "pm.test('transactionCodeDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) {",
+                  "    console.log('TrxCode count:', rows.length);",
+                  "    console.log('Sample:', JSON.stringify(rows[0]));",
+                  "    pm.test('trxGroup present', () => pm.expect(rows[0]).to.have.property('trxGroup'));",
+                  "    pm.test('revenueYn present', () => pm.expect(rows[0]).to.have.property('revenueYn'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query FinancialTransactionCodes($input: FinancialTransactionCodesQueryArgumentsType!) {\\n  financialTransactionCodes(input: $input) {\\n    transactionCodeDetails {\\n      resort\\n      trxCode\\n      description\\n      trxGroup\\n      trxSubgroup\\n      revenueYn\\n      roomRevenueYn\\n      packageYn\\n      activeYn\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"transactionCodeDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches transaction code master data.\n\n**Key fields:**\n- `trxCode` — TC_CODE\n- `trxGroup` — TC_GROUP (ROOM, FB, PAY, TAX, PKG, MISC, etc.)\n- `trxSubgroup` — TC_SUBGROUP (numeric subgroup codes)\n- `revenueYn` — IND_REVENUE_GP equivalent\n- `roomRevenueYn` — included in room revenue\n- `packageYn` — included in package\n- `activeYn` — active/deleted flag (N = deleted)"
+          }
+        },
+        {
+          "name": "DIM – Room Types (ROOM_TYPE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.inventoryRooms?.roomDetails;",
+                  "pm.test('roomDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) {",
+                  "    // Deduplicate by roomCategoryLabel",
+                  "    const unique = [...new Set(rows.map(r => r.roomCategoryLabel))];",
+                  "    console.log('Distinct RoomTypeLabels:', unique.join(', '));",
+                  "    console.log('Sample:', JSON.stringify(rows[0]));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query InventoryRooms($input: InventoryRoomsQueryArgumentsType!) {\\n  inventoryRooms(input: $input) {\\n    roomDetails {\\n      resort\\n      room\\n      roomCategoryLabel\\n      roomCategoryDescription\\n      roomClass\\n      pseudoRoomYn\\n      activeYn\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"roomDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches room configuration master data.\nGroup by `roomCategoryLabel` to get distinct ROOM_TYPE master list.\n\n**Key fields:**\n- `roomCategoryLabel` — ROOM_TYPE CODE (DB1, DS1, WB1, etc.)\n- `roomCategoryDescription` — ROOM_TYPE DESCRIPTION\n- `roomClass` — room class grouping\n- `pseudoRoomYn` — N = physical room, Y = virtual/posting master"
+          }
+        },
+        {
+          "name": "DIM – Rate Codes (RATE_CODE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.ratesCodeDetails?.rateCodeDetails;",
+                  "pm.test('rateCodeDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) console.log('Rate codes:', rows.length, '— Sample:', JSON.stringify(rows[0]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query RatesCodeDetails($input: RatesCodeDetailsQueryArgumentsType!) {\\n  ratesCodeDetails(input: $input) {\\n    rateCodeDetails {\\n      resort\\n      rateCode\\n      rateDescription\\n      rateCategory\\n      rateClass\\n      marketCode\\n      sourceCode\\n      activeYn\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"rateCodeDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches rate code master data.\n\n**Key fields:**\n- `rateCode` — RATE_CODE\n- `rateDescription` — description\n- `rateCategory` — RATE_CATEGORY (RATE_HEADER in CSV)\n- `rateClass` — rate class"
+          }
+        },
+        {
+          "name": "DIM – Market/Source/Channel Codes (via ExportMappings)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.exportMappings?.exportMappingDetails;",
+                  "pm.test('exportMappingDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) {",
+                  "    const byType = rows.reduce((acc, r) => {",
+                  "        acc[r.fieldName] = (acc[r.fieldName] || 0) + 1;",
+                  "        return acc;",
+                  "    }, {});",
+                  "    console.log('Counts by FIELD_NAME:', JSON.stringify(byType));",
+                  "    console.log('Sample:', JSON.stringify(rows[0]));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query ExportMappings($input: ExportMappingsQueryArgumentsType!) {\\n  exportMappings(input: $input) {\\n    exportMappingDetails {\\n      resort\\n      fieldName\\n      externalCode\\n      externalDescription\\n      activeYn\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"exportMappingDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"exportMappingDetailsFieldName\": { \"_in\": [\"MARKETCODE\", \"SOURCE_CODE\", \"CHANNEL\"] }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches MARKETCODE, SOURCE_CODE, CHANNEL dimension codes via ExportMappings SA.\nThese dimensions do not have dedicated master SAs — ExportMappings is the best source.\n\n**Fallback:** Extract distinct values from StatisticsReservationsDaily if ExportMappings\ndoes not return these field types in your environment.\n\n**Key fields:**\n- `fieldName` — FIELD_NAME (MARKETCODE, SOURCE_CODE, CHANNEL)\n- `externalCode` — CODE\n- `externalDescription` — DESCRIPTION\n- `activeYn` — FLAG"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 – RMN/OOO (Room Inventory)",
+      "description": "CSV: {RESORT}_OPERA_RMN_{yyyymmdd}.csv (room list)\n     {RESORT}_OPERA_OOO_{yyyymmdd}.csv (daily OOO/OS counts)\nDB Tables: ROOM, REP_MANAGER",
+      "item": [
+        {
+          "name": "RMN – Room List (InventoryRooms)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.inventoryRooms?.roomDetails;",
+                  "pm.test('roomDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) {",
+                  "    console.log('Physical rooms:', rows.filter(r => r.pseudoRoomYn === 'N').length);",
+                  "    console.log('Sample:', JSON.stringify(rows[0]));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query InventoryRooms($input: InventoryRoomsQueryArgumentsType!) {\\n  inventoryRooms(input: $input) {\\n    roomDetails {\\n      resort\\n      room\\n      roomStatus\\n      roomCategoryLabel\\n      roomClass\\n      pseudoRoomYn\\n      activeYn\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"roomDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches physical room list with current status.\nCSV: {RESORT}_OPERA_RMN_{yyyymmdd}.csv\n\nRoom status values: CL=Clean, DI=Dirty, IP=Inspected, OO=Out of Order, OS=Out of Service\nFilter `pseudoRoomYn = N` for physical rooms only."
+          }
+        },
+        {
+          "name": "OOO – Daily Room Inventory by Class (StatisticsManagersReport)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.statisticsManagersReport?.managersReportDetails;",
+                  "pm.test('managersReportDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) {",
+                  "    console.log('OOO rows:', rows.length, '— Sample:', JSON.stringify(rows[0]));",
+                  "    pm.test('oooRooms field present', () => pm.expect(rows[0]).to.have.property('oooRooms'));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query StatisticsManagersReport($input: StatisticsManagersReportQueryArgumentsType!) {\\n  statisticsManagersReport(input: $input) {\\n    managersReportDetails {\\n      resort\\n      businessDate\\n      roomClass\\n      osRooms\\n      oooRooms\\n      availRoom\\n      physicalBeds\\n      oooBeds\\n      osBeds\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"managersReportDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"managersReportDetailsBusinessDate\": {\n        \"_gte\": \"{{startDate}}\",\n        \"_lte\": \"{{endDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches daily OOO/OS room counts by room class.\nCSV: {RESORT}_OPERA_OOO_{yyyymmdd}.csv\nDB Table: REP_MANAGER\n\n**Key fields:**\n- `oooRooms` — OOO_ROOMS (out of order)\n- `osRooms` — OS_ROOMS (out of service)\n- `availRoom` — AVAIL_ROOM (available)\n- `physicalBeds`, `oooBeds`, `osBeds` — bed-level counts"
+          }
+        },
+        {
+          "name": "OOO – Daily OOO/OOS by RoomType (InventoryRoomsManagement)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.inventoryRoomsManagement?.roomDetails;",
+                  "pm.test('roomDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) console.log('Inventory rows:', rows.length, '— Sample:', JSON.stringify(rows[0]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query InventoryRoomsManagement($input: InventoryRoomsManagementQueryArgumentsType!) {\\n  inventoryRoomsManagement(input: $input) {\\n    roomDetails {\\n      resort\\n      date\\n      room\\n      roomCategoryLabel\\n      roomStatus\\n      outOfOrderYn\\n      outOfServiceYn\\n      startDate\\n      endDate\\n      reason\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"roomDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"roomDetailsDate\": {\n        \"_gte\": \"{{startDate}}\",\n        \"_lte\": \"{{endDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches room-level OOO/OOS assignments by date range.\nMore granular than StatisticsManagersReport — provides per-room, per-date detail.\n\nUse this to compute OOO/OOS counts by RoomCategoryLabel for ra.RoomInventory."
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 – Blocks (BookingsBlock)",
+      "description": "Block reservations snapshot — combined into OTB export in the spec.\nDB Table: Block header + grid\nSubject Area: BookingsBlock",
+      "item": [
+        {
+          "name": "BLOCK – Block Reservations Snapshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.bookingsBlock?.blockDetails;",
+                  "pm.test('blockDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) {",
+                  "    console.log('Block rows:', rows.length, '— Sample:', JSON.stringify(rows[0]));",
+                  "    pm.test('blockCode present', () => pm.expect(rows[0]).to.have.property('blockCode'));",
+                  "    pm.test('blockedRooms present', () => pm.expect(rows[0]).to.have.property('blockedRooms'));",
+                  "    // Flag past cutoff",
+                  "    const today = new Date().toISOString().split('T')[0];",
+                  "    const pastCutoff = rows.filter(r => r.cutoffDate && r.cutoffDate < today);",
+                  "    if (pastCutoff.length > 0) console.warn('Blocks past cutoff:', pastCutoff.length);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" },
+              { "key": "x-hotelid",    "value": "{{hotelCode}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query BookingsBlock($input: BookingsBlockQueryArgumentsType!) {\\n  bookingsBlock(input: $input) {\\n    blockDetails {\\n      resort\\n      blockCode\\n      blockName\\n      marketCode\\n      roomCategoryLabel\\n      blockIdDate\\n      arrivalDate\\n      departureDate\\n      cutoffDate\\n      blockedRooms\\n      pickedUpRooms\\n      remainingRooms\\n      resvStatus\\n      currencyCode\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"blockDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] },\n      \"blockDetailsArrivalDate\": {\n        \"_gte\": \"{{otbStartDate}}\",\n        \"_lte\": \"{{otbEndDate}}\"\n      }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches group block reservations for a future date range.\n\n**Key mapping to ra.BlockReservations:**\n- `blockIdDate` → CONSIDERED_DATE (stay/grid date)\n- `SNAPSHOT_DATE` set by loader (current BusinessDate)\n- `blockedRooms` → ROOMS_CONTRACTED\n- `pickedUpRooms` → ROOMS_PICKED_UP\n- `remainingRooms` → ROOMS_REMAINING (may be computed)\n- `cutoffDate` < SNAPSHOT_DATE → IS_PAST_CUTOFF = 1"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 – Property Config (ConfigurationResort)",
+      "item": [
+        {
+          "name": "CONFIG – Property Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.errors) console.warn('GraphQL errors:', JSON.stringify(json.errors));",
+                  "const rows = json.data?.configurationResort?.propertyDetails;",
+                  "pm.test('propertyDetails array present', () => pm.expect(rows).to.be.an('array'));",
+                  "if (rows) console.log('Properties:', rows.length, '— Sample:', JSON.stringify(rows[0]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Accept",       "value": "multipart/mixed; deferSpec=20220824, application/json" },
+              { "key": "x-app-key",    "value": "{{appKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"query ConfigurationResort($input: ConfigurationResortQueryArgumentsType!) {\\n  configurationResort(input: $input) {\\n    propertyDetails {\\n      resort\\n      resortName\\n      country\\n      currencyCode\\n      timeZone\\n      chainCode\\n    }\\n  }\\n}\",\n  \"variables\": {\n    \"input\": {\n      \"propertyDetailsResort\": { \"_in\": [\"{{hotelCode}}\"] }\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/rna/v1/graphql/",
+            "description": "Fetches property configuration.\nUsed to populate ra.Hotels master table.\n\n**Key fields:** resort, resortName, country, currencyCode, timeZone, chainCode"
+          }
+        }
+      ]
+    }
+  ]
+}
