@@ -248,44 +248,78 @@ Note: The R&A Data API does not use cursor/offset pagination.
 ```
 
 ### Logger.psm1
-Structured log to file (daily rotation) + optional SQL, SMTP alert on ERROR.
+Single shared log file for the entire application run. All modules write to the
+same file via the shared `$script:LogFilePath` set at startup. Optional SQL
+mirror to `dbo.LoadLog`. SMTP alert on ERROR.
 
 ```
+Module-level state (shared across all callers in the process):
+  $script:LogFilePath  — absolute path, set once by Initialize-Logger at startup
+  $script:LogLevel     — minimum level: DEBUG < INFO < WARN < ERROR
+  $script:SqlLogging   — bool, mirror writes to dbo.LoadLog
+
 Functions:
-  Initialize-Logger  -LogDirectory [string] -LogName [string] -LogLevel [string]
-                     → sets $script:LogFilePath for the session
-  Write-Log          -Level [INFO|WARN|ERROR|DEBUG] -Message [string]
-                     -HotelCode [string] -BatchId [guid]
-  Start-Batch        -HotelCode [string] -Mode [string] -QueryType [string]
-                     → [guid] BatchId
-  Complete-Batch     -BatchId [guid] -Status [string] -RowCount [int]
-                     -RowsInserted [int] -RowsUpdated [int] -ErrorMessage [string]
-  Send-AlertEmail    -Subject [string] -Body [string]
+  Initialize-Logger   -LogDirectory [string] -LogLevel [string] -SqlLogging [bool]
+                      Sets $script:LogFilePath = "<LogDirectory>\YYYYMMDD_OperaRALoader.log"
+                      (YYYYMMDD = date of run, evaluated once at process start)
+                      Creates directory if missing. Appends if file already exists (re-run).
+                      Called ONCE from Run-OperaRALoader.ps1 before any module is loaded.
 
-Log file naming:
-  {LogDirectory}\{yyyyMMdd}_{LogName}.log
+  Write-Log           -Level    [INFO|WARN|ERROR|DEBUG]
+                      -Module   [string]       ← caller identifier (see table below)
+                      -Message  [string]
+                      -HotelCode [string]      ← empty string for global/startup messages
+                      -BatchId   [guid]        ← [guid]::Empty when not in a batch context
 
-  LogName values (one file per run type, all created in same LogDirectory):
-    OperaRA_Loader      → 20260730_OperaRA_Loader.log      (main orchestrator)
-    OperaRA_RES         → 20260730_OperaRA_RES.log          (reservation stats)
-    OperaRA_FIN         → 20260730_OperaRA_FIN.log          (financial transactions)
-    OperaRA_OTB         → 20260730_OperaRA_OTB.log          (on-the-books snapshot)
-    OperaRA_DIM         → 20260730_OperaRA_DIM.log          (master data)
-    OperaRA_RMN         → 20260730_OperaRA_RMN.log          (room inventory)
+  Start-Batch         -HotelCode [string] -Mode [string] -QueryType [string]
+                      → [guid] BatchId
+                      Writes initial Running row to dbo.LoadLog (if SqlLogging)
 
-  Example full path:  Logs\20260730_OperaRA_RES.log
+  Complete-Batch      -BatchId [guid] -Status [string] -RowsFetched [int]
+                      -RowsInserted [int] -RowsUpdated [int] -ErrorMessage [string]
 
-Log line format:
-  YYYY-MM-DD HH:mm:ss.fff [LEVEL] [HotelCode] [BatchId] Message
+  Send-AlertEmail     -Subject [string] -Body [string]
+                      Triggered only when SMTP enabled and Level = ERROR
 
-  Example:
-  2026-07-30 23:01:14.382 [INFO]  [TEST01] [a1b2c3d4] RES rows fetched: 24
-  2026-07-30 23:01:15.901 [WARN]  [TEST01] [a1b2c3d4] Late postings detected: 3
-  2026-07-30 23:01:16.005 [ERROR] [TEST01] [a1b2c3d4] HTTP 429 — retrying (1/3)
+Log file naming (single file, whole run):
+  <LogDirectory>\YYYYMMDD_OperaRALoader.log
+  Example:  Logs\20260905_OperaRALoader.log
 
-Sensitive mask:   bearer tokens, client secrets, API keys replaced with ****
-New log file:     created automatically if it does not exist for the current date
-Append mode:      if same date file already exists (re-run), content is appended
+Log line format (pipe-delimited, fixed-width columns for easy grep/import):
+  YYYYMMDD_HH:mm:ss.fff | LEVEL   | MODULE                  | HotelCode | Message
+
+Example lines:
+  20260905_06:15:00.001 | INFO    | Run-OperaRALoader       |           | Loader started. Mode=Delta Hotels=3
+  20260905_06:15:00.045 | INFO    | Auth                    | HOTEL1    | Token acquired. ExpiresIn=3600s
+  20260905_06:15:00.512 | INFO    | ReservationStats        | HOTEL1    | SA=StatisticsReservationsDaily date=2026-09-04..2026-09-04
+  20260905_06:15:01.210 | INFO    | ReservationStats        | HOTEL1    | Fetched 24 rows. Duration=698ms
+  20260905_06:15:01.215 | INFO    | SqlWriter.Write-RES     | HOTEL1    | BulkCopy staging 24 rows
+  20260905_06:15:01.310 | INFO    | SqlWriter.Write-RES     | HOTEL1    | MERGE complete. Inserted=20 Updated=4
+  20260905_06:15:01.320 | WARN    | FinancialTransactions   | HOTEL1    | 2 late postings (TRX_DATE > BUSINESS_DATE)
+  20260905_06:15:05.001 | ERROR   | ApiClient               | HOTEL2    | HTTP 503 after 3 retries. SA=FinancialTransactionDetails
+
+Module name constants (use exactly these strings for -Module parameter):
+  "Run-OperaRALoader"       orchestrator startup and hotel loop
+  "Config"                  config loading and credential decryption
+  "Auth"                    Auth.psm1 — token acquire/refresh
+  "ApiClient"               ApiClient.psm1 — HTTP layer, retries
+  "DateHelper"              DateHelper.psm1
+  "ReservationStats"        Queries\ReservationStats.psm1
+  "FinancialTransactions"   Queries\FinancialTransactions.psm1
+  "OnTheBooks"              Queries\OnTheBooks.psm1
+  "BlockReservations"       Queries\BlockReservations.psm1
+  "RoomInventory"           Queries\RoomInventory.psm1 (RMN + OOO)
+  "MasterData"              Queries\MasterData.psm1
+  "SqlWriter.Init"          SqlWriter — Initialize-Database
+  "SqlWriter.Write-RES"     SqlWriter — Write-ReservationStats
+  "SqlWriter.Write-FIN"     SqlWriter — Write-FinancialTx
+  "SqlWriter.Write-OTB"     SqlWriter — Write-OnTheBooks
+  "SqlWriter.Write-BLK"     SqlWriter — Write-BlockReservations
+  "SqlWriter.Write-RMN"     SqlWriter — Write-RoomInventory (RMN)
+  "SqlWriter.Write-OOO"     SqlWriter — Write-RoomInventory (OOO)
+  "SqlWriter.Write-DIM"     SqlWriter — Write-MasterData
+
+Sensitive mask: bearer tokens, ClientSecret, ApiKey replaced with **** in all output
 ```
 
 ### DateHelper.psm1
