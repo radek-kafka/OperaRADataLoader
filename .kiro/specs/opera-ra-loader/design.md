@@ -157,6 +157,24 @@ Returns: `{ "access_token": "...", "expires_in": 3600, "token_type": "Bearer" }`
 - Responses may contain partial data with an `errors` array — always inspect it.
 - No native cursor/offset pagination in the API; date chunking is the primary volume control.
 
+### Output Date Formatting (RES, OTB, FIN)
+All date/datetime values emitted to the RES, OTB, and FIN outputs use a compact format:
+- **Date-only fields** → `YYYYMMDD` (e.g. `20260507`).
+- **Datetime fields** (carry a time component) → `YYYYMMDD HH:mm:ss` (e.g. `20260507 12:33:21`).
+
+Scope and rules:
+- Applies to the RES, OTB, and FIN query outputs (e.g. `BUSINESS_DATE`, `TRUNC_BEGIN_DATE`,
+  `TRUNC_END_DATE`, `CANCELLATION_DATE`, `SNAPSHOT_DATE`, `CONSIDERED_DATE`, `TRX_DATE`,
+  `TRX_DATE_UTC`).
+- This is an **output/serialisation** rule only. SQL columns remain `DATE` / `DATETIME2`
+  so date semantics, sorting, and joins are preserved; the `YYYYMMDD` form is produced when
+  materialising output (CSV / formatted export / display), not stored as text.
+- **GraphQL API request filters are NOT affected** — the OHIP R&A API requires ISO
+  `YYYY-MM-DD` in `_eq` / `_gte` / `_lte`, so date filters continue to use `YYYY-MM-DD`.
+- Empty / null date values render as an empty string (no `YYYYMMDD` placeholder).
+- Formatting helper lives in `DateHelper.psm1` (e.g. `Format-OutputDate` /
+  `Format-OutputDateTime`) so RES/OTB/FIN modules format consistently.
+
 ### Subject Area → Query Mapping
 
 | Export | OHIP Subject Area                    | GraphQL operation name               | Target Table      |
@@ -173,7 +191,9 @@ Returns: `{ "access_token": "...", "expires_in": 3600, "token_type": "Bearer" }`
 | DIM TC | `FinancialTransactionCodes`          | `financialTransactionCodes`          | `ra.DIM_TrxCodes` |
 | DIM RT | `InventoryRooms`                     | `inventoryRooms`                     | `ra.DIM_RoomTypes`|
 | DIM RC | `RatesCodeDetails`                   | `ratesCodeDetails`                   | `ra.DIM_RateCodes`|
-| DIM MC/SC/CH | `ExportMappings`               | `exportMappings`                     | `ra.DIM_*`        |
+| DIM MC | `ExportMappings`                     | `exportMappings`                     | `ra.DIM_MarketCodes` |
+| DIM SC | `ExportMappings`                     | `exportMappings`                     | `ra.DIM_SourceCodes` (source of reservation, SOURCE_CODE) |
+| DIM CH | `ExportMappings`                     | `exportMappings`                     | `ra.DIM_Channels` (distribution channel, CHANNEL) |
 | Hotels | `ConfigurationResort`                | `configurationResort`                | `ra.Hotels`       |
 
 > GraphQL schemas published at [oracle/hospitality-api-docs](https://github.com/oracle/hospitality-api-docs).
@@ -250,7 +270,7 @@ Note: The R&A Data API does not use cursor/offset pagination.
 ### Logger.psm1
 Single shared log file for the entire application run. All modules write to the
 same file via the shared `$script:LogFilePath` set at startup. Optional SQL
-mirror to `dbo.LoadLog`. SMTP alert on ERROR.
+mirror to `dbo.LoadLog`. Per-hotel severity-based email alerts over a shared SMTP transport (recipients from hotels.json emailAlerts).
 
 ```
 Module-level state (shared across all callers in the process):
@@ -278,8 +298,14 @@ Functions:
   Complete-Batch      -BatchId [guid] -Status [string] -RowsFetched [int]
                       -RowsInserted [int] -RowsUpdated [int] -ErrorMessage [string]
 
-  Send-AlertEmail     -Subject [string] -Body [string]
-                      Triggered only when SMTP enabled and Level = ERROR
+  Send-AlertEmail     -Hotel [hashtable] -Severity [INFO|WARN|ERROR]
+                      -Subject [string] -Body [string] -Attachments [string[]]
+                      Uses the shared SMTP transport from settings.json (server, port,
+                      from, useSsl, encrypted username/password). Resolves recipients
+                      from the hotel's own emailAlerts.<severity>.to[] / .cc[].
+                      Sends only when smtp.enabled AND Hotel.emailAlerts.enabled AND
+                      Hotel.emailAlerts.<severity>.enabled AND recipients exist.
+                      Delivery failure is logged as WARN and never aborts the run.
 
 Log file naming (single file, whole run):
   <LogDirectory>\YYYYMMDD_OperaRALoader.log
@@ -376,15 +402,15 @@ Functions:
 
 GraphQL field → SQL column:
   resort              → RESORT
-  businessDate        → BUSINESS_DATE
+  businessDate        → BUSINESS_DATE      [out: YYYYMMDD]
   resvNameId          → RESV_NAME_ID     ← join key → ra.FIN, ra.OTB
   rateCode            → RATE_CODE
   rateCategory        → RATE_CATEGORY
   marketCode          → MARKET_CODE
   sourceCode          → SOURCE_CODE
   channel             → CHANNEL
-  truncBeginDate      → TRUNC_BEGIN_DATE
-  truncEndDate        → TRUNC_END_DATE
+  truncBeginDate      → TRUNC_BEGIN_DATE   [out: YYYYMMDD]
+  truncEndDate        → TRUNC_END_DATE     [out: YYYYMMDD]
   room                → ROOM
   pseudoRoomYn        → PSEUDO_ROOM_YN
   roomCategoryLabel   → ROOM_CATEGORY_LABEL
@@ -407,7 +433,7 @@ GraphQL field → SQL column:
   houseUseYn          → HOUSE_USE_YN
   complimentaryYn     → COMPLIMENTARY_YN
   walkinYn            → WALKIN_YN
-  cancellationDate    → CANCELLATION_DATE
+  cancellationDate    → CANCELLATION_DATE  [out: YYYYMMDD HH:mm:ss]
   country             → COUNTRY
   nights              → NIGHTS
 ```
@@ -427,7 +453,7 @@ Functions:
 
 GraphQL field → SQL column:
   resort              → RESORT
-  businessDate        → BUSINESS_DATE
+  businessDate        → BUSINESS_DATE      [out: YYYYMMDD]
   resvNameId          → RESV_NAME_ID       ← join key → ra.RES
   originalResvNameId  → ORIGINAL_RESV
   rateCode            → RATE_CODE
@@ -440,7 +466,7 @@ GraphQL field → SQL column:
   trxNo               → TRX_NO             ← transaction identifier
   tranActionId        → TRAN_ACTION_ID     ← transaction action identifier
   trxNoAddedBy        → TRX_NO_ADDED_BY    ← parent TRX_NO (links tax to charge)
-  trxDate             → TRX_DATE           populate TRX_DATE_UTC via Convert-ToUtc
+  trxDate             → TRX_DATE           populate TRX_DATE_UTC via Convert-ToUtc  [out: YYYYMMDD HH:mm:ss for TRX_DATE + TRX_DATE_UTC]
   netAmount           → NET_AMOUNT         revenue excl. VAT
   grossAmount         → GROSS_AMOUNT       incl. VAT (null for payments)
   trxAmount           → TRX_AMOUNT
@@ -473,8 +499,8 @@ Functions:
 
 GraphQL field → SQL column:
   resort              → RESORT
-  (set by loader)     → SNAPSHOT_DATE     = business date of run
-  stayDate            → CONSIDERED_DATE   ← future stay date
+  (set by loader)     → SNAPSHOT_DATE     = business date of run   [out: YYYYMMDD]
+  stayDate            → CONSIDERED_DATE   ← future stay date   [out: YYYYMMDD]
   eventType           → EVENT_TYPE
   marketCode          → MARKET_CODE
   sourceCode          → SOURCE_CODE
@@ -485,8 +511,8 @@ GraphQL field → SQL column:
   resvType            → RESV_TYPE
   country             → COUNTRY
   currencyCode        → CURRENCY_CODE
-  truncBeginDate      → TRUNC_BEGIN_DATE
-  truncEndDate        → TRUNC_END_DATE
+  truncBeginDate      → TRUNC_BEGIN_DATE   [out: YYYYMMDD]
+  truncEndDate        → TRUNC_END_DATE     [out: YYYYMMDD]
   arrRooms            → ARR_ROOMS
   depRooms            → DEP_ROOMS
   noRooms             → NO_ROOMS
@@ -538,7 +564,7 @@ Functions:
 
 GraphQL field → SQL column:
   resort              → RESORT
-  (set by loader)     → SNAPSHOT_DATE     = business date of run
+  (set by loader)     → SNAPSHOT_DATE     = business date of run   [out: YYYYMMDD]
   blockIdDate         → CONSIDERED_DATE   ← block stay/grid date
   blockCode           → BLOCK_CODE
   blockName           → BLOCK_NAME
@@ -595,7 +621,7 @@ GraphQL field → SQL column (InventoryRooms → ra.RMN):
 
 GraphQL field → SQL column (StatisticsManagersReport → ra.OOO):
   resort              → RESORT
-  businessDate        → BUSINESS_DATE
+  businessDate        → BUSINESS_DATE      [out: YYYYMMDD]
   roomClass           → ROOM_CLASS
   oooRooms            → OOO_ROOMS
   osRooms             → OS_ROOMS
@@ -618,13 +644,26 @@ MasterDataType values and their Subject Areas:
   RateCodes         → RatesCodeDetails            (ratesCodeDetails)
   RateCategories    → RatesCategories             (ratesCategories)
   RoomTypeLabels    → InventoryRooms              (inventoryRooms)
+  MarketCodes       → ExportMappings              (exportMappings)   → ra.DIM_MarketCodes
+  SourceCodes       → ExportMappings              (exportMappings)   → ra.DIM_SourceCodes  (source of reservation)
+  Channels          → ExportMappings              (exportMappings)   → ra.DIM_Channels     (distribution channel)
   Property/Hotels   → ConfigurationResort         (configurationResort)
   ChainConfig       → ConfigurationChain          (configurationChain)
 
-Note: MarketSegments, ReservationSources, Channels are dimensions embedded
-      within statistical subject areas. They are extracted as distinct
-      values from StatisticsReservationsDaily and cached as master data.
-      Alternatively ExportMappings SA can provide code-description pairs.
+Note: SourceCodes and Channels are TWO SEPARATE, independent code lists and must
+      never be merged:
+        - SourceCodes = SOURCE OF RESERVATION (booking origin), OPERA field SOURCE_CODE
+                        *** PRIORITY / REQUIRED master dimension — always loaded ***
+        - Channels    = DISTRIBUTION CHANNEL (e.g. GDS, OTA, Direct, Web, CRO),
+                        OPERA field CHANNEL
+                        *** OPTIONAL — best-effort load; skipped WITHOUT error if the
+                        channel list is unavailable or absent from ExportMappings ***
+      MarketCodes (market segment), SourceCodes, and Channels are each pulled as
+      distinct code/description pairs from the ExportMappings subject area, one
+      logical list per dimension. (If ExportMappings is unavailable, distinct values
+      may be harvested from StatisticsReservationsDaily as a fallback, still kept as
+      three independent lists.) A missing Channels list is logged at INFO/WARN and
+      does not fail the run; a missing SourceCodes list is treated as a real problem.
 
 TrxCodes GraphQL field → SQL column mapping (FinancialTransactionCodes):
   transactionCodeDetails.resort              → HotelCode
@@ -651,6 +690,28 @@ RateCodes GraphQL field → SQL column mapping (RatesCodeDetails):
   rateCodeDetails.rateDescription → Description
   rateCodeDetails.rateCategory    → RateCategory
   rateCodeDetails.activeYn        → IsActive
+
+MarketCodes GraphQL field → SQL column mapping (ExportMappings, market segment list):
+  exportMappingDetails.resort      → HotelCode
+  exportMappingDetails.code        → Code            (MARKETCODE)
+  exportMappingDetails.description → Description
+  exportMappingDetails.groupCode   → SegmentGroup
+  exportMappingDetails.activeYn    → IsActive
+
+SourceCodes GraphQL field → SQL column mapping (ExportMappings, SOURCE OF RESERVATION list) [PRIORITY / REQUIRED]:
+  -- Independent from Channels. Represents where the booking originated. Always loaded.
+  exportMappingDetails.resort      → HotelCode
+  exportMappingDetails.code        → Code            (SOURCE_CODE)
+  exportMappingDetails.description → Description
+  exportMappingDetails.activeYn    → IsActive
+
+Channels GraphQL field → SQL column mapping (ExportMappings, DISTRIBUTION CHANNEL list) [OPTIONAL / best-effort]:
+  -- Independent from SourceCodes. Represents the distribution channel (GDS/OTA/Direct/Web/CRO).
+  -- Optional dimension: if this list is not returned, skip without failing the run.
+  exportMappingDetails.resort      → HotelCode
+  exportMappingDetails.code        → Code            (CHANNEL)
+  exportMappingDetails.description → Description
+  exportMappingDetails.activeYn    → IsActive
 ```
 
 ---
@@ -675,7 +736,13 @@ RateCodes GraphQL field → SQL column mapping (RatesCodeDetails):
       "nightAuditHour": 23,
       "nightAuditMinute": 0,
       "otbFutureDays": 365,
-      "blockFutureDays": 180
+      "blockFutureDays": 180,
+      "emailAlerts": {
+        "enabled": true,
+        "error": { "enabled": true,  "to": ["oncall-hotel1@<domain>"], "cc": ["integration-lead@<domain>"] },
+        "warn":  { "enabled": true,  "to": ["ops-hotel1@<domain>"],    "cc": ["integration-lead@<domain>"] },
+        "info":  { "enabled": false, "to": ["ops-hotel1@<domain>"],    "cc": [] }
+      }
     },
     {
       "hotelCode": "HOTEL2",
@@ -691,7 +758,13 @@ RateCodes GraphQL field → SQL column mapping (RatesCodeDetails):
       "nightAuditHour": 0,
       "nightAuditMinute": 0,
       "otbFutureDays": 365,
-      "blockFutureDays": 180
+      "blockFutureDays": 180,
+      "emailAlerts": {
+        "enabled": true,
+        "error": { "enabled": true,  "to": ["oncall-hotel2@<domain>"], "cc": ["integration-lead@<domain>"] },
+        "warn":  { "enabled": true,  "to": ["ops-hotel2@<domain>"],    "cc": ["integration-lead@<domain>"] },
+        "info":  { "enabled": false, "to": ["ops-hotel2@<domain>"],    "cc": [] }
+      }
     }
   ]
 }
@@ -722,22 +795,19 @@ RateCodes GraphQL field → SQL column mapping (RatesCodeDetails):
     "logDirectory": "Logs",
     "logLevel": "INFO",
     "sqlLogging": true,
-    "logNames": {
-      "loader": "OperaRA_Loader",
-      "res":    "OperaRA_RES",
-      "fin":    "OperaRA_FIN",
-      "otb":    "OperaRA_OTB",
-      "dim":    "OperaRA_DIM",
-      "rmn":    "OperaRA_RMN"
-    }
+    "logName": "OperaRA_Loader"
   },
   "smtp": {
     "enabled": false,
-    "server": "",
+    "smtpServer": "REPLACE_ME-smtp-relay-host",
     "port": 587,
-    "from": "",
-    "to": [],
-    "useSsl": true
+    "useSsl": true,
+    "from": "opera-ra-loader@REPLACE_ME.com",
+    "fromDisplayName": "OPERA R&A Loader",
+    "authRequired": true,
+    "username": "REPLACE_ME-smtp-username",
+    "password": "<encrypted>",
+    "maxInlineEntriesPerEmail": 50
   }
 }
 ```

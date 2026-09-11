@@ -1,0 +1,93 @@
+{
+  "_comment": "SAMPLE hotel configuration template (plain text, NO real credentials). Copy this file to Config\\hotels.input.json, replace every REPLACE_ME placeholder with real values, then run Tools\\Protect-HotelsConfig.ps1 to produce the DPAPI-encrypted Config\\hotels.json. Never commit hotels.input.json or hotels.json to source control.",
+  "hotels": [
+    {
+      "hotelCode": "HOTEL1",
+      "chainCode": "CHAIN_A",
+      "displayName": "Grand Hotel Downtown",
+      "enabled": true,
+      "gatewayUrl": "https://chaina-prod.hospitality.oracle.com",
+      "enterpriseId": "REPLACE_ME-enterpriseId-chainA",
+      "clientId": "REPLACE_ME-clientId",
+      "clientSecret": "REPLACE_ME-clientSecret",
+      "apiKey": "REPLACE_ME-apiKey",
+      "timeZoneId": "Central European Standard Time",
+      "nightAuditHour": 23,
+      "nightAuditMinute": 0,
+      "otbFutureDays": 365,
+      "blockFutureDays": 180,
+      "emailAlerts": {
+        "enabled": true,
+        "error": {
+          "enabled": true,
+          "to": [
+            "oncall-hotel1@REPLACE_ME.com"
+          ],
+          "cc": [
+            "integration-lead@REPLACE_ME.com"
+          ]
+        },
+        "warn": {
+          "enabled": true,
+          "to": [
+            "ops-hotel1@REPLACE_ME.com"
+          ],
+          "cc": [
+            "integration-lead@REPLACE_ME.com"
+          ]
+        },
+        "info": {
+          "enabled": false,
+          "to": [
+            "ops-hotel1@REPLACE_ME.com"
+          ],
+          "cc": []
+        }
+      }
+    },
+    {
+      "hotelCode": "HOTEL2",
+      "chainCode": "CHAIN_B",
+      "displayName": "Beach Resort",
+      "enabled": true,
+      "gatewayUrl": "https://chainb-prod.hospitality.oracle.com",
+      "enterpriseId": "REPLACE_ME-enterpriseId-chainB",
+      "clientId": "REPLACE_ME-clientId",
+      "clientSecret": "REPLACE_ME-clientSecret",
+      "apiKey": "REPLACE_ME-apiKey",
+      "timeZoneId": "US Eastern Standard Time",
+      "nightAuditHour": 0,
+      "nightAuditMinute": 0,
+      "otbFutureDays": 365,
+      "blockFutureDays": 180,
+      "emailAlerts": {
+        "enabled": true,
+        "error": {
+          "enabled": true,
+          "to": [
+            "oncall-hotel2@REPLACE_ME.com"
+          ],
+          "cc": [
+            "integration-lead@REPLACE_ME.com"
+          ]
+        },
+        "warn": {
+          "enabled": true,
+          "to": [
+            "ops-hotel2@REPLACE_ME.com"
+          ],
+          "cc": [
+            "integration-lead@REPLACE_ME.com"
+          ]
+        },
+        "info": {
+          "enabled": false,
+          "to": [
+            "ops-hotel2@REPLACE_ME.com"
+          ],
+          "cc": []
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+# ==============================================================================
+# OPERA R&A Data Loader — .gitignore
+# GenAI-generated code — reviewed and approved by: <name> <date>
+# PowerShell 7 / SQL Server project (Windows)
+# git normalizes path separators, so forward slashes are used throughout.
+# ==============================================================================
+
+# --- Sensitive credentials (MANDATORY — never commit) ------------------------
+# Encrypted per-hotel credentials produced by Protect-HotelsConfig.ps1
+Config/hotels.json
+# Plain-text credential input consumed by Protect-HotelsConfig.ps1
+Config/hotels.input.json
+
+# --- Runtime output ----------------------------------------------------------
+# Log directory is auto-created at runtime
+Logs/
+
+# Keep committed reference/config files (guard against accidental ignore)
+!Config/hotels.sample.json
+!Config/settings.json
+
+# --- Additional secret / credential patterns ---------------------------------
+*.secret
+*.secrets
+secrets.json
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+
+# --- PowerShell / build artifacts --------------------------------------------
+*.psd1.bak
+*.ps1.bak
+output/
+bin/
+obj/
+
+# --- SQL artifacts -----------------------------------------------------------
+*.bak
+*.trn
+*.dacpac
+*.bacpac
+
+# --- Windows / editor temp files ---------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.temp
+*~
+*.swp
+.vs/

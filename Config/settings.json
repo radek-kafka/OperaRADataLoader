@@ -1,0 +1,53 @@
+{
+  "sqlServer": {
+    "server": "REPLACE_ME-sqlserver-instance",
+    "database": "OperaRA",
+    "trustedConnection": true,
+    "encrypt": true,
+    "trustServerCertificate": true,
+    "connectTimeout": 30,
+    "commandTimeout": 300,
+    "connectionString": "Server=REPLACE_ME-sqlserver-instance;Database=OperaRA;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;Connect Timeout=30"
+  },
+  "api": {
+    "requestDelayMs": 500,
+    "maxRetries": 3,
+    "retryBaseDelaySeconds": 2,
+    "retryMaxDelaySeconds": 30,
+    "retryableStatusCodes": [
+      429,
+      500,
+      502,
+      503,
+      504
+    ],
+    "httpTimeoutSeconds": 120,
+    "tokenSafetyMarginSeconds": 60,
+    "graphqlEndpointPath": "/rna/v1/graphql/",
+    "oauthScope": "urn:opc:hgbu:ws:_myscopes_"
+  },
+  "extraction": {
+    "otbFutureDays": 365,
+    "blockFutureDays": 365,
+    "transactionalChunkDays": 7,
+    "masterDataChunkDays": 0
+  },
+  "logging": {
+    "logDirectory": "Logs",
+    "logLevel": "INFO",
+    "sqlLogging": true,
+    "logName": "OperaRA_Loader"
+  },
+  "smtp": {
+    "enabled": false,
+    "smtpServer": "REPLACE_ME-smtp-relay-host",
+    "port": 587,
+    "useSsl": true,
+    "from": "opera-ra-loader@REPLACE_ME.com",
+    "fromDisplayName": "OPERA R&A Loader",
+    "authRequired": true,
+    "username": "REPLACE_ME-smtp-username",
+    "password": "REPLACE_ME-smtp-password (DPAPI-encrypted by Protect-HotelsConfig.ps1)",
+    "maxInlineEntriesPerEmail": 50
+  }
+}

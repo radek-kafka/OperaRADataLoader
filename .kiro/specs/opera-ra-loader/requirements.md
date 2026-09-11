@@ -156,7 +156,7 @@ Master Data (full/delta refresh)
 - **MUST** include log levels: `INFO`, `WARN`, `ERROR`, `DEBUG`.
 - **MUST** log: hotel code, chain code, query type, date range, rows fetched, duration, status.
 - **MUST** support `-Verbose` and `-Debug` PowerShell switches.
-- **SHOULD** send email alert on critical failure (configurable SMTP settings).
+- **SHOULD** send email alert on critical failure (configurable SMTP settings). See **REQ-016** for full severity-based notification behaviour.
 
 ### REQ-013 – Scheduling & Execution Modes
 - **MUST** support a `-Mode` parameter: `Full`, `Delta`, `OTB`, `MasterData`, `All`.
@@ -175,3 +175,20 @@ Master Data (full/delta refresh)
 - **MUST** log a warning when the API returns no data for an expected date/hotel and continue processing remaining hotels.
 - **MUST** record a `NoData` status in `dbo.LoadLog` (not an error) when API returns empty results.
 - **MUST** support a `-FailFast` switch to stop all processing on first error (default: continue and log).
+
+### REQ-016 – Severity-Based Email Notifications
+- **MUST** provide configurable email notifications driven by log severity, so operators can be alerted when a run produces `INFO`, `WARN`, or `ERROR` events.
+- **MUST** define email recipients **per hotel** in `Config\hotels.json` (alongside that hotel's API credentials), not globally: each hotel carries an `emailAlerts` block with an `enabled` toggle and per-severity recipient lists (`to[]` / `cc[]` for `INFO`, `WARN`, `ERROR`). Example for one hotel: `WARN` -> that property's ops + integration lead, `ERROR` -> that property's on-call / escalation list.
+- **MUST** allow each severity level to be independently enabled or disabled per hotel (e.g. a hotel notifies on `WARN` and `ERROR` only, suppresses `INFO`), and allow a hotel to disable all its alerts via `emailAlerts.enabled = false`.
+- **MUST** treat notifications as **end-of-run summaries**: emails are evaluated and sent after a hotel run (and/or the overall batch) completes, not per individual log event, to avoid inbox flooding across many hotels and query types.
+- **MUST** trigger an email for a given severity only when at least one log entry at that level occurred during the run; runs with no qualifying entries send no email for that level.
+- **MUST** compose the email body as a **structured run summary** including: `BatchId`, hotel code(s), chain code(s), execution `Mode`, business/date range, per query type (RES, FIN, OTB, DIM, RMN) row counts and status, run duration, and a count of log entries per level (`INFO` / `WARN` / `ERROR`).
+- **MUST** include the matching log entries **inline in the email body**, filtered to the triggering severity level (e.g. an `ERROR` notification lists the `ERROR` entries).
+- **MUST** attach the **full daily log file** for the run to the notification email so recipients have complete context beyond the filtered inline entries.
+- **MUST** use a single shared SMTP transport defined in `Config\settings.json` (`smtpServer`, `port`, `useSsl`, `from`, and credential handling) for delivery, while the recipient distribution lists are resolved per hotel from `Config\hotels.json` `emailAlerts`. When a hotel omits recipients for a severity, no email is sent to that hotel for that level.
+- **MUST** never embed SMTP credentials in plain text; the shared SMTP `username` / `password` in `settings.json` **MUST** be DPAPI-encrypted following the same secure handling rules as REQ-002 (encrypted store / environment variable fallback), produced by `Protect-HotelsConfig.ps1`.
+- **MUST** mask sensitive values (credentials, tokens, secrets) in any log content that is emailed, consistent with REQ-002 and REQ-012.
+- **MUST** ensure email delivery failure does **not** abort or fail the data load: notification errors are logged as `WARN` and the run continues / preserves its own exit code.
+- **SHOULD** support a global toggle (`smtp.enabled = false`) that disables all email notifications regardless of per-severity settings, for environments where email is unavailable (e.g. CI/CD).
+- **SHOULD** de-duplicate or cap the number of inline entries per email (configurable max, with a "N more — see attached log" note) to keep messages readable when a run generates many entries.
+- **SHOULD** respect the `-DryRun` switch: notifications are still evaluated but clearly marked as a dry-run in the subject/body.

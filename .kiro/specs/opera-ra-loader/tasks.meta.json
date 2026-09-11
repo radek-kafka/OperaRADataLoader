@@ -1,0 +1,1692 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "Create folder structure: `Config\\`, `Modules\\`, `Modules\\Queries\\`, `SQL\\`, `Tools\\`, `Logs\\`": [
+      {
+        "executionId": "6bbfe31f-176d-45c5-b006-1867ed47ab42",
+        "chatSessionId": "sess_47f6eac9-1b4e-4f91-a8f7-b07db09ed2d9",
+        "timestamp": 1788899046543
+      },
+      {
+        "executionId": "6bbfe31f-176d-45c5-b006-1867ed47ab42",
+        "chatSessionId": "sess_47f6eac9-1b4e-4f91-a8f7-b07db09ed2d9",
+        "timestamp": 1788899098681
+      }
+    ],
+    "Create `Config\\settings.json` with all global settings: SQL Server, API throttle, extraction horizons (`otbFutureDays`, `blockFutureDays`, `transactionalChunkDays`), logging (`logDirectory`, `logLevel`, `sqlLogging`, `logNames` for each query type: Loader, RES, FIN, OTB, DIM, RMN), SMTP": [
+      {
+        "executionId": "107fbb58-e7a0-4f75-8e10-2430dd632494",
+        "chatSessionId": "sess_cfb35baf-1185-41e1-8e65-57a027f9552f",
+        "timestamp": 1788899129407
+      },
+      {
+        "executionId": "8b067abc-0aa4-4b66-b224-9ddec7a2e317",
+        "chatSessionId": "sess_0e794340-b2ed-4a21-9556-f0828a47c0cc",
+        "timestamp": 1788900378986
+      },
+      {
+        "executionId": "8b067abc-0aa4-4b66-b224-9ddec7a2e317",
+        "chatSessionId": "sess_0e794340-b2ed-4a21-9556-f0828a47c0cc",
+        "timestamp": 1788900514672
+      }
+    ],
+    "Create `Config\\hotels.sample.json` with two sample hotels across two different chains (plain text, no real credentials), including `otbFutureDays`, `blockFutureDays`, `nightAuditHour`, `timeZoneId`": [
+      {
+        "executionId": "05641e33-e65d-4f5e-9f08-3909e0f95c55",
+        "chatSessionId": "sess_74cfab04-e766-4d44-aca8-81f675c9e84a",
+        "timestamp": 1788900153923
+      },
+      {
+        "executionId": "05641e33-e65d-4f5e-9f08-3909e0f95c55",
+        "chatSessionId": "sess_74cfab04-e766-4d44-aca8-81f675c9e84a",
+        "timestamp": 1788900329022
+      }
+    ],
+    "Create `.gitignore` excluding `Config\\hotels.json`, `Logs\\`, `Config\\hotels.input.json`": [
+      {
+        "executionId": "356adc54-34ee-455d-bcef-da672e12d298",
+        "chatSessionId": "sess_bb7236e6-24a9-4121-84fa-21c3723b2bdc",
+        "timestamp": 1788900919924
+      },
+      {
+        "executionId": "356adc54-34ee-455d-bcef-da672e12d298",
+        "chatSessionId": "sess_bb7236e6-24a9-4121-84fa-21c3723b2bdc",
+        "timestamp": 1788901068245
+      }
+    ],
+    "Implement `Initialize-Logger` — sets `$script:LogFilePath` using `{LogDirectory}\\{yyyyMMdd}_{LogName}.log` pattern; creates `LogDirectory` if absent; opens in append mode so re-runs on same day accumulate in same file": [
+      {
+        "executionId": "7e940f82-e4ed-4d82-888d-b7986d2fc81b",
+        "chatSessionId": "sess_020e1271-4b7b-410c-aa5c-434f39c910ea",
+        "timestamp": 1788931962318
+      },
+      {
+        "executionId": "7e940f82-e4ed-4d82-888d-b7986d2fc81b",
+        "chatSessionId": "sess_020e1271-4b7b-410c-aa5c-434f39c910ea",
+        "timestamp": 1788936460596
+      }
+    ],
+    "Implement `Write-Log` with levels INFO / WARN / ERROR / DEBUG; format: `YYYY-MM-DD HH:mm:ss.fff [LEVEL] [HotelCode] [BatchId] Message`": [
+      {
+        "executionId": "52078175-0ee2-4efb-8214-91dc1d771dc1",
+        "chatSessionId": "sess_721b0c7f-9f56-43c5-a20c-22c8d730335f",
+        "timestamp": 1788936718970
+      },
+      {
+        "executionId": "52078175-0ee2-4efb-8214-91dc1d771dc1",
+        "chatSessionId": "sess_721b0c7f-9f56-43c5-a20c-22c8d730335f",
+        "timestamp": 1788938948284
+      }
+    ],
+    "(REBUILD) Implement `Initialize-Logger` — called ONCE at startup by the orchestrator; sets `$script:LogFilePath` to the single shared file `{LogDirectory}\\{yyyyMMdd}_{logName}.log` using `logging.logDirectory` + single `logging.logName` from `settings.json` (no per-query-type files); creates `LogDirectory` if absent; opens in append mode so re-runs on the same day accumulate in the same file": [
+      {
+        "executionId": "309bf93d-0d8f-4917-acc9-e3730a0c3f90",
+        "chatSessionId": "sess_dadcf985-753e-4f61-94c0-3cfbfc58623b",
+        "timestamp": 1788966201229
+      },
+      {
+        "executionId": "309bf93d-0d8f-4917-acc9-e3730a0c3f90",
+        "chatSessionId": "sess_dadcf985-753e-4f61-94c0-3cfbfc58623b",
+        "timestamp": 1789020964404
+      }
+    ],
+    "(REBUILD) Implement `Write-Log` with levels INFO / WARN / ERROR / DEBUG; format: `YYYY-MM-DD HH:mm:ss.fff [LEVEL] [HotelCode] [BatchId] Message`; writes to the single shared `$script:LogFilePath` (one common file for the whole run — orchestrator + all query modules)": [
+      {
+        "executionId": "48d27e28-b284-4cc2-9773-21c41dadec27",
+        "chatSessionId": "sess_62a6fa4d-9d02-4221-9383-a11689ce9a89",
+        "timestamp": 1789021441706
+      },
+      {
+        "executionId": "48d27e28-b284-4cc2-9773-21c41dadec27",
+        "chatSessionId": "sess_62a6fa4d-9d02-4221-9383-a11689ce9a89",
+        "timestamp": 1789021617750
+      },
+      {
+        "executionId": "ec97cb75-d16c-4dcb-bd0d-493be7e5db2d",
+        "chatSessionId": "sess_ceb336e4-62c2-45de-a40d-3654cbe614b1",
+        "timestamp": 1789025208467
+      },
+      {
+        "executionId": "ec97cb75-d16c-4dcb-bd0d-493be7e5db2d",
+        "chatSessionId": "sess_ceb336e4-62c2-45de-a40d-3654cbe614b1",
+        "timestamp": 1789031389861
+      }
+    ],
+    "Log file directory and single log name read from `settings.json` `logging.logDirectory` and `logging.logName`; file name resolves to `{yyyyMMdd}_{logName}.log`": [
+      {
+        "executionId": "2a19dc2d-47b1-4582-936d-7db039d03808",
+        "chatSessionId": "sess_d507728e-a644-485f-9cfb-8e75336a2d64",
+        "timestamp": 1789021635036
+      },
+      {
+        "executionId": "2a19dc2d-47b1-4582-936d-7db039d03808",
+        "chatSessionId": "sess_d507728e-a644-485f-9cfb-8e75336a2d64",
+        "timestamp": 1789021791603
+      }
+    ],
+    "Implement `Start-Batch` returning a new `[guid]` BatchId; write initial `Running` row to `dbo.LoadLog`": [
+      {
+        "executionId": "ea916f5e-ab14-484c-aae6-0bc4de1ae867",
+        "chatSessionId": "sess_18a1eebd-b49b-439f-8535-9fe052994f99",
+        "timestamp": 1789021825941
+      },
+      {
+        "executionId": "ea916f5e-ab14-484c-aae6-0bc4de1ae867",
+        "chatSessionId": "sess_18a1eebd-b49b-439f-8535-9fe052994f99",
+        "timestamp": 1789022598571
+      }
+    ],
+    "Use a single shared log file for the entire run: `Initialize-Logger` is called once at startup by the orchestrator, and every module (orchestrator + all query modules) writes to the same `$script:LogFilePath`. Distinguish sources via the `[HotelCode]` / `[BatchId]` / `[LEVEL]` columns, not separate files": [
+      {
+        "executionId": "f29cf314-6273-4950-ab90-4f92e33b0048",
+        "chatSessionId": "sess_14b0b287-e55a-4c94-a235-e6bbac973cdc",
+        "timestamp": 1789022615955
+      },
+      {
+        "executionId": "2650c222-a8c3-4608-a97b-03901dc749a9",
+        "chatSessionId": "sess_2311fa67-4602-43a0-b7a3-4f605c87830d",
+        "timestamp": 1789032075530
+      },
+      {
+        "executionId": "2650c222-a8c3-4608-a97b-03901dc749a9",
+        "chatSessionId": "sess_2311fa67-4602-43a0-b7a3-4f605c87830d",
+        "timestamp": 1789032239687
+      }
+    ],
+    "Implement `Complete-Batch` updating `dbo.LoadLog` with final status, row counts, duration": [
+      {
+        "executionId": "1fe7ab40-bbbf-4dca-b3e6-2e4ff00e09e0",
+        "chatSessionId": "sess_6e97759e-b11b-42f0-9696-5f3f11bf0864",
+        "timestamp": 1789023556919
+      },
+      {
+        "executionId": "8d344dba-85d4-4e81-993a-18be78b2444b",
+        "chatSessionId": "sess_24bc5b3d-c1a8-46cb-8105-5becf46ce9d0",
+        "timestamp": 1789032782724
+      },
+      {
+        "executionId": "8d344dba-85d4-4e81-993a-18be78b2444b",
+        "chatSessionId": "sess_24bc5b3d-c1a8-46cb-8105-5becf46ce9d0",
+        "timestamp": 1789038103915
+      }
+    ],
+    "Mask sensitive patterns (bearer tokens, secrets, API keys) with `****` in all log output": [
+      {
+        "executionId": "90c11432-95b0-47ab-b997-2b8c9c81b3f8",
+        "chatSessionId": "sess_dc912c3a-bfdc-40b4-a097-5053e395bf71",
+        "timestamp": 1789038957039
+      },
+      {
+        "executionId": "90c11432-95b0-47ab-b997-2b8c9c81b3f8",
+        "chatSessionId": "sess_dc912c3a-bfdc-40b4-a097-5053e395bf71",
+        "timestamp": 1789040005899
+      }
+    ],
+    "Support `-Verbose` and `-Debug` PowerShell switches via `$VerbosePreference` / `$DebugPreference`": [
+      {
+        "executionId": "76b2e2f3-5437-4574-ac56-d4e7a933f9ab",
+        "chatSessionId": "sess_a7bd58fd-e043-4ad1-b142-aca2ab5720fb",
+        "timestamp": 1789040238682
+      },
+      {
+        "executionId": "76b2e2f3-5437-4574-ac56-d4e7a933f9ab",
+        "chatSessionId": "sess_a7bd58fd-e043-4ad1-b142-aca2ab5720fb",
+        "timestamp": 1789042988486
+      }
+    ],
+    "Implement `Get-BusinessDate` — resolves hotel local yesterday accounting for `nightAuditHour` and `timeZoneId`": [
+      {
+        "executionId": "4e13a56a-6fcb-444d-bc7c-fa5273132ac6",
+        "chatSessionId": "sess_49a0e73f-af6a-457c-ac28-ff3f46ba4b64",
+        "timestamp": 1789043060241
+      },
+      {
+        "executionId": "4e13a56a-6fcb-444d-bc7c-fa5273132ac6",
+        "chatSessionId": "sess_49a0e73f-af6a-457c-ac28-ff3f46ba4b64",
+        "timestamp": 1789045843737
+      }
+    ],
+    "Implement `Format-OutputDate` (date-only → `YYYYMMDD`) and `Format-OutputDateTime` (datetime → `YYYYMMDD HH:mm:ss`); empty/null → empty string. Used by RES/OTB/FIN output. Note: does NOT apply to GraphQL API request filters, which keep ISO `YYYY-MM-DD`": [
+      {
+        "executionId": "736120a5-05a5-4f64-bc16-99ce3df78fd8",
+        "chatSessionId": "sess_aa601066-1ce9-43ca-bcc6-2ea1e8724d97",
+        "timestamp": 1789046160760
+      },
+      {
+        "executionId": "736120a5-05a5-4f64-bc16-99ce3df78fd8",
+        "chatSessionId": "sess_aa601066-1ce9-43ca-bcc6-2ea1e8724d97",
+        "timestamp": 1789046597709
+      }
+    ],
+    "Implement `Convert-ToUtc` and `Convert-ToLocal` using `[TimeZoneInfo]::FindSystemTimeZoneById`": [
+      {
+        "executionId": "f42669ad-6936-4f87-81ad-4bb42ae87ce6",
+        "chatSessionId": "sess_7b25bbe7-3682-4d52-ae8d-9e4a18865155",
+        "timestamp": 1789046614617
+      },
+      {
+        "executionId": "f42669ad-6936-4f87-81ad-4bb42ae87ce6",
+        "chatSessionId": "sess_7b25bbe7-3682-4d52-ae8d-9e4a18865155",
+        "timestamp": 1789048827191
+      }
+    ],
+    "Implement `Get-DateRangeChunks` — splits a date range into chunks of N days (configurable, default 7 for transactional data)": [
+      {
+        "executionId": "79c6caa3-d1c6-4920-87c2-502dbcb4deee",
+        "chatSessionId": "sess_3f0a695c-2074-4b51-b52c-10f335808e91",
+        "timestamp": 1789048847258
+      },
+      {
+        "executionId": "79c6caa3-d1c6-4920-87c2-502dbcb4deee",
+        "chatSessionId": "sess_3f0a695c-2074-4b51-b52c-10f335808e91",
+        "timestamp": 1789050132170
+      }
+    ],
+    "Implement `Get-SnapshotHorizon` — returns `SnapshotDate`, `ConsideredDateStart`, `ConsideredDateEnd` based on hotel `otbFutureDays` / `blockFutureDays`": [
+      {
+        "executionId": "7b0fcef6-03d2-4e1c-bf7f-c609e6797b83",
+        "chatSessionId": "sess_71de3b48-da99-4705-82ac-24b92c6df46b",
+        "timestamp": 1789050151387
+      },
+      {
+        "executionId": "7b0fcef6-03d2-4e1c-bf7f-c609e6797b83",
+        "chatSessionId": "sess_71de3b48-da99-4705-82ac-24b92c6df46b",
+        "timestamp": 1789051775186
+      }
+    ],
+    "Cover edge cases: DST transition nights, `nightAuditHour = 0` (midnight), missing config fallback to 00:00": [
+      {
+        "executionId": "95cb118a-1d56-4eba-962d-3b4c3edea059",
+        "chatSessionId": "sess_1d90cd6a-12a2-4260-bd33-16bced3c0382",
+        "timestamp": 1789051793185
+      },
+      {
+        "executionId": "95cb118a-1d56-4eba-962d-3b4c3edea059",
+        "chatSessionId": "sess_1d90cd6a-12a2-4260-bd33-16bced3c0382",
+        "timestamp": 1789055831901
+      }
+    ],
+    "Implement in-memory token cache `$script:TokenCache` keyed by `HotelCode`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058082032
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058131162
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058275889
+      }
+    ],
+    "Implement `Get-OAuthToken` — POST `/oauth/token` with `client_credentials` grant; parse `access_token` + `expires_in`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058082178
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058281234
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058584477
+      }
+    ],
+    "Implement token expiry check: `ExpiresAt > (Now + SafetyMarginSeconds)`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058082345
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058585959
+      }
+    ],
+    "Implement `Clear-TokenCache -HotelCode` for forced refresh on 401": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058082530
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058587400
+      }
+    ],
+    "Decrypt `ClientId` and `ClientSecret` from DPAPI-encrypted config before use; never log either value": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058082859
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058588715
+      }
+    ],
+    "Implement `Invoke-RAApi` with header injection: `Authorization: Bearer`, `x-app-key`, `x-hotelid`, `Content-Type: application/json`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058083121
+      },
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058593859
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060618817
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060655803
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061340594
+      }
+    ],
+    "Implement HTTP 401 handler: `Clear-TokenCache` → `Get-OAuthToken` → retry once": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058083387
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060619029
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061342442
+      }
+    ],
+    "Implement retry with exponential backoff on 429 / 500 / 502 / 503 / 504 (base 2 s, ×2 per attempt, cap 30 s, max 3 retries)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058083668
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060619188
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061343620
+      }
+    ],
+    "Implement pagination loop consuming `nextPageToken` or offset-based paging; collect all pages into single result array": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058084102
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060619329
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061345346
+      }
+    ],
+    "Implement per-request throttle: `Start-Sleep -Milliseconds $config.api.requestDelayMs` between page calls": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058084395
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060619516
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061346433
+      }
+    ],
+    "Return normalised `[array]` of `[PSCustomObject]` with consistent field names": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058084711
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060619732
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061347597
+      }
+    ],
+    "`SQL\\001_CreateSchema.sql` — create schema `ra` with `IF NOT EXISTS` guard": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058085119
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060620020
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061359183
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061959731
+      }
+    ],
+    "`SQL\\002_CreateTables_Actuals.sql` — `dbo.LoadLog`, `ra.ReservationStats`, `ra.FinancialTx`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058085503
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060620286
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061959449
+      }
+    ],
+    "`SQL\\003_CreateTables_Snapshots.sql` — `ra.OnTheBooks`, `ra.BlockReservations`, `ra.RoomInventory`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058085923
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060620897
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061957106
+      }
+    ],
+    "`SQL\\004_CreateTables_MasterData.sql` — `ra.TrxCodes`, `ra.RoomTypeLabels`, `ra.MarketSegments`, `ra.RateCodes`, `ra.ReservationSources`, `ra.Channels`, `ra.Hotels`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058086169
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060621299
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061955548
+      }
+    ],
+    "`SQL\\005_CreateIndexes.sql` — indexes on `HotelCode`, `BusinessDate`/`SnapshotDate`/`ConsideredDate`/`InventoryDate`, `BatchId`, `ReservationId`, `TrxCode`, `IsCurrent`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058086432
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060621668
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061953715
+      }
+    ],
+    "Implement `Initialize-Database` — execute DDL scripts 001–005 idempotently on startup": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058086741
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060622046
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789061973779
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063599600
+      }
+    ],
+    "Implement `Write-ReservationStats` — `SqlBulkCopy` to staging → `MERGE` into `ra.ReservationStats` on natural key": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058087111
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060622366
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063597055
+      }
+    ],
+    "Implement `Write-FinancialTx` — `SqlBulkCopy` to staging → `MERGE` into `ra.FinancialTx`; compute `IsLatePosting` during mapping": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058087402
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060622735
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063595551
+      }
+    ],
+    "Implement `Write-OnTheBooks` — `SqlBulkCopy` to staging → `MERGE` into `ra.OnTheBooks` (insert new `SnapshotDate` rows; do not overwrite prior snapshots)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058087679
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060623068
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063593924
+      }
+    ],
+    "Implement `Write-BlockReservations` — `SqlBulkCopy` to staging → `MERGE` into `ra.BlockReservations`; set `IsPastCutoff` where `CutoffDate < SnapshotDate`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058087964
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060623408
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063592432
+      }
+    ],
+    "Implement `Write-RoomInventory` — `SqlBulkCopy` to staging → `MERGE` into `ra.RoomInventory` on natural key": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058088403
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060623672
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063591177
+      }
+    ],
+    "Implement `Write-MasterData` — SCD Type 2 MERGE for all seven master tables:": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058088685
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060624118
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063589553
+      }
+    ],
+    "Implement `Write-LoadLog` — insert initial `Running` row and update on completion": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058088954
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060624418
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063588244
+      }
+    ],
+    "Implement `Get-ReservationStats -Hotel -StartDate -EndDate`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058089218
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060624742
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789063611275
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064264514
+      }
+    ],
+    "Build R&A API request body for the reservation statistics endpoint; apply date chunking via `Get-DateRangeChunks`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058089546
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060625042
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064258274
+      }
+    ],
+    "Map API response fields to flat `[PSCustomObject]` matching `ra.ReservationStats` schema including `ReservationId`, `MarketSegment`, `RoomTypeLabel`, `ReservationSource`, `Channel`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058089829
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060625333
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064259751
+      }
+    ],
+    "Format output date fields with `Format-OutputDate` / `Format-OutputDateTime`: date-only (`BUSINESS_DATE`, `TRUNC_BEGIN_DATE`, `TRUNC_END_DATE`) → `YYYYMMDD`; datetime (`CANCELLATION_DATE`) → `YYYYMMDD HH:mm:ss`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058090393
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060625612
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064262724
+      }
+    ],
+    "Compute `ADR` and `RevPAR` if not returned directly by API (`ADR = Revenue / RoomNights`; `RevPAR = Revenue / PhysicalRooms`)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058090662
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060625962
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064263578
+      }
+    ],
+    "Log row count and duration per date chunk per hotel": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058090964
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060626276
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064256833
+      }
+    ],
+    "Implement `Get-FinancialTransactions -Hotel -StartDate -EndDate`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058091297
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060626578
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789064278182
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071821299
+      }
+    ],
+    "Build R&A API request body for the financial/folio transactions endpoint; apply date chunking": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058091558
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060627093
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071820299
+      }
+    ],
+    "Map API response to flat `[PSCustomObject]` matching `ra.FinancialTx` schema including `ReservationId`, `TrxCode`, `TrxType`, `PostingDate`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058091899
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060627412
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071817074
+      }
+    ],
+    "Populate `PostingDateLocal` (hotel TZ) and `PostingDateUtc` using `Convert-ToUtc`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058092208
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060627720
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071815165
+      }
+    ],
+    "Format output date fields with the DateHelper formatters: date-only (`BUSINESS_DATE`) → `YYYYMMDD`; datetime (`TRX_DATE`, `TRX_DATE_UTC`) → `YYYYMMDD HH:mm:ss`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058092460
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060628068
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071818844
+      }
+    ],
+    "Set `IsLatePosting = 1` where `PostingDate > BusinessDate`; log WARN with count if any late postings found": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058092745
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060628349
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071813959
+      }
+    ],
+    "Implement `Get-OnTheBooks -Hotel -SnapshotDate -FutureDays`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058093143
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060628636
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789071833760
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789104136386
+      }
+    ],
+    "Use `Get-SnapshotHorizon` to build `ConsideredDateStart` / `ConsideredDateEnd` range": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058093414
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060628929
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789104136574
+      }
+    ],
+    "Build R&A API request body for OTB endpoint": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058093692
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060629233
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789104136120
+      }
+    ],
+    "Map response fields to `ra.OnTheBooks` schema: `SnapshotDate`, `ConsideredDate`, `MarketSegment`, `RoomTypeLabel`, `ReservationSource`, `Channel`, `RoomsOnBooks`, `TentativeRooms`, `DefiniteRooms`, `ADROnBooks`, `RevenueOnBooks`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058093960
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060629743
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789104136831
+      }
+    ],
+    "Format output date fields with `Format-OutputDate`: date-only (`SNAPSHOT_DATE`, `CONSIDERED_DATE`, `TRUNC_BEGIN_DATE`, `TRUNC_END_DATE`) → `YYYYMMDD`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058094245
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060630052
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789104137049
+      }
+    ],
+    "Log snapshot date, considered date range, and row count": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058094483
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060630379
+      }
+    ],
+    "Implement `Get-BlockReservations -Hotel -SnapshotDate -FutureDays`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058094779
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060630668
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789104146156
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789109103295
+      }
+    ],
+    "Build R&A API request body for group block endpoint": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058095165
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060631070
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789109102006
+      }
+    ],
+    "Map response to `ra.BlockReservations` schema: `SnapshotDate`, `ConsideredDate`, `BlockCode`, `BlockName`, `RoomTypeLabel`, `MarketSegment`, `RoomsContracted`, `RoomsPickedUp`, `RoomsRemaining`, `CutoffDate`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058101327
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060631352
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789109101145
+      }
+    ],
+    "Compute `IsPastCutoff = 1` where `CutoffDate < SnapshotDate`; log WARN count if any": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058101564
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060631651
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789109098962
+      }
+    ],
+    "Implement `Get-RoomInventory -Hotel -StartDate -EndDate`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058101820
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060632014
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789109112850
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789113062710
+      }
+    ],
+    "Build R&A API request for room inventory / availability endpoint": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058102114
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060632495
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789113065427
+      }
+    ],
+    "Map response to `ra.RoomInventory` schema: `InventoryDate`, `RoomTypeLabel`, `PhysicalRooms`, `OutOfOrder`, `OutOfService`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058102412
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060632792
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789113064526
+      }
+    ],
+    "Compute `AvailableRooms = PhysicalRooms - OutOfOrder - OutOfService` if not returned by API": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058102687
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060633052
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789113067005
+      }
+    ],
+    "Support both historical (actuals) and future (forecast) date ranges in a single call": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058103069
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060633378
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789113061672
+      }
+    ],
+    "Implement `Get-MasterData -Hotel -Type -ChangedSince`; `-Type` accepts: `TrxCodes`, `RoomTypeLabels`, `RateCodes`, `MarketCodes`, `SourceCodes` (source of reservation — PRIORITY/required), `Channels` (distribution channel — OPTIONAL), `Hotels`. `SourceCodes` and `Channels` are two independent code lists and MUST NOT be merged": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058103350
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060633647
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789113079096
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114803682
+      }
+    ],
+    "Implement full refresh mode (no `-ChangedSince`) and delta mode (pass `ChangedSince` filter to API)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058103607
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060633984
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114805068
+      }
+    ],
+    "Map `TrxCodes` response: `TrxCode`, `TrxName`, `TrxGroup`, `TrxType`, `RevenueYN`, `IncludedInRoomRevenueYN`, `IncludedInPackageYN`, `IsActive`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058103913
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060634286
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114806905
+      }
+    ],
+    "Map `RoomTypeLabels` response: `RoomTypeLabel`, `Description`, `RoomClass`, `PhysicalRoomCount`, `IsActive`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058104221
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060634676
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114808367
+      }
+    ],
+    "Map `MarketCodes` (market segment) from `ExportMappings` to `ra.DIM_MarketCodes`: `Code`, `Description`, `SegmentGroup`, `IsActive`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058104503
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060635027
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114810209
+      }
+    ],
+    "Map `RateCodes`: `Code`, `Description`, `RateCategory`, `IsActive`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058104774
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060635333
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114811230
+      }
+    ],
+    "Map `SourceCodes` (source of reservation, OPERA `SOURCE_CODE`) from `ExportMappings` to `ra.DIM_SourceCodes`: `Code`, `Description`, `IsActive` — PRIORITY / required dimension, always loaded; a missing source list is treated as an error": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058105046
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060635641
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114801616
+      }
+    ],
+    "Map `Channels` (distribution channel, OPERA `CHANNEL` — e.g. GDS/OTA/Direct/Web/CRO) from `ExportMappings` to `ra.DIM_Channels`: `Code`, `Description`, `IsActive`; keep as a separate list from `SourceCodes` — OPTIONAL / best-effort: skip WITHOUT failing the run (log INFO/WARN) if the channel list is unavailable or absent": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058105328
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060635940
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114799503
+      }
+    ],
+    "Detect and log changes between current DB records and API response (new codes, description changes, deactivations)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058105633
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060636219
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114812473
+      }
+    ],
+    "Read plain-text `Config\\hotels.input.json` (never committed to source control)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058105898
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060636597
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789114823308
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789115066373
+      }
+    ],
+    "Encrypt `clientId`, `clientSecret`, `apiKey` per hotel, and the shared `smtp.username`/`smtp.password` in `settings.json`, using `ConvertTo-SecureString` with DPAPI": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058106144
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060636895
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789115068282
+      }
+    ],
+    "Write encrypted values to `Config\\hotels.json`; copy all other fields unchanged": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058106431
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060637332
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789115065359
+      }
+    ],
+    "Verify round-trip decryption for each value before writing; abort on mismatch": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058106727
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060637641
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789115069219
+      }
+    ],
+    "Add usage comment header to script with instructions for service account setup": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058107014
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060637950
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789115070443
+      }
+    ],
+    "Declare all parameters: `-Mode`, `-HotelCode`, `-ChainCode`, `-BusinessDate`, `-StartDate`, `-EndDate`, `-DryRun`, `-FailFast`, `-ConfigPath`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058107460
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060638272
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789115089466
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117380000
+      }
+    ],
+    "Load and validate `settings.json` and `hotels.json` at startup; fail fast on missing required fields": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058107754
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060638566
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117370563
+      }
+    ],
+    "Decrypt hotel credentials (DPAPI); validate decryption before proceeding": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058108041
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060638834
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117371900
+      }
+    ],
+    "Filter hotel list by `-HotelCode` / `-ChainCode` when specified": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058108333
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060639155
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117373634
+      }
+    ],
+    "Call `Initialize-Database` when `-Mode Full` or on first run (no schema present)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058108647
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060639460
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117375410
+      }
+    ],
+    "Per-hotel execution loop:": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058108937
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060639958
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117376776
+      }
+    ],
+    "Output summary table to console on completion: Hotel | Status | Rows | Duration": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058109195
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060640228
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117377184
+      }
+    ],
+    "Set `exit` code: 0 = all success, 1 = partial failure, 2 = total failure": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058109463
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060640482
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117378079
+      }
+    ],
+    "Prerequisites: PowerShell 7.x, SQL Server, network access to OPERA Cloud R&A API": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058109960
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060640754
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117399711
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117660963
+      }
+    ],
+    "Installation steps: clone, run `Protect-HotelsConfig.ps1`, configure `settings.json`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058110299
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060641202
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117651956
+      }
+    ],
+    "Scheduling guidance: Windows Task Scheduler XML template and SQL Agent job example": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058110619
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060641514
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117652902
+      }
+    ],
+    "Full parameter reference table for `Run-OperaRALoader.ps1`": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058110940
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060641882
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117654413
+      }
+    ],
+    "SQL schema overview with entity relationship notes (RES ↔ FIN via `BusinessDate + ReservationId`; OTB/Block `SnapshotDate + ConsideredDate` pattern)": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058111327
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060642270
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117655813
+      }
+    ],
+    "Troubleshooting section: token errors, late postings, SCD2 rollback procedure": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058111687
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060642832
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117657189
+      }
+    ],
+    "Add `# GenAI-generated code — reviewed and approved by: <name> <date>` header to all `.ps1` / `.psm1` files per Infor policy": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058112332
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060643164
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117658448
+      }
+    ],
+    "Document exit codes and monitoring integration guidance": [
+      {
+        "executionId": "db82c067-ba4d-4611-abac-3633f43bd5fa",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789058112620
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789060643563
+      },
+      {
+        "executionId": "4c68b788-a411-4ef4-bc7c-5b87a4721b45",
+        "chatSessionId": "sess_61b3da51-e13c-42ce-b8a2-ba4676e3326d",
+        "timestamp": 1789117659850
+      }
+    ]
+  }
+}
