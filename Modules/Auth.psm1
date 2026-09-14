@@ -32,11 +32,17 @@
 
     Credential handling (REQ-002):
       ClientId/ClientSecret are stored DPAPI-encrypted in the hotel config. They are
-      decrypted with ConvertTo-SecureString (DPAPI) immediately before building the
-      token request, converted to plaintext only in-memory for the POST body, and the
-      plaintext is cleared as soon as the request has been built. Neither the
-      credentials nor the resulting bearer token are ever emitted to the log or the
-      verbose/debug streams.
+      decrypted immediately before building the token request, converted to plaintext
+      only in-memory for the POST body, and the plaintext is cleared as soon as the
+      request has been built. Neither the credentials nor the resulting bearer token are
+      ever emitted to the log or the verbose/debug streams.
+
+      Encrypted values are self-describing. Tools\Protect-HotelsConfig.ps1 produces one
+      of two tagged forms and the decryptor reverses whichever it finds; it also accepts
+      legacy untagged values for backward compatibility:
+        "DPAPI:CU:v1:<base64>"  ProtectedData CurrentUser  scope + app entropy
+        "DPAPI:LM:v1:<base64>"  ProtectedData LocalMachine scope + app entropy
+        <legacy untagged hex>   old ConvertFrom-SecureString (CurrentUser DPAPI)
 
 .NOTES
     Module name constant for Logger -Module parameter: "Auth"
@@ -67,6 +73,22 @@ $script:DefaultSafetyMarginSeconds = 60
 
 # The fixed OAuth scope required on every OHIP token request (REQ-003).
 $script:DefaultOAuthScope = 'urn:opc:hgbu:ws:_myscopes_'
+
+# ------------------------------------------------------------------------------
+# Self-describing DPAPI scheme constants (credential decryption).
+#
+# KEEP IN SYNC with Tools\Protect-HotelsConfig.ps1 (Protect-DpapiValue). If you change
+# the tag prefixes or the entropy salt here, change them there too, or values encrypted
+# by the tool will stop decrypting at runtime.
+#
+# Tagged format:  "DPAPI:<scope>:v1:<base64>"
+#   <scope>  = 'CU' (CurrentUser) | 'LM' (LocalMachine)
+#   <base64> = Base64( ProtectedData.Protect( UTF8(plaintext), entropy, scope ) )
+# ------------------------------------------------------------------------------
+$script:DpapiTagCurrentUser  = 'DPAPI:CU:v1:'
+$script:DpapiTagLocalMachine = 'DPAPI:LM:v1:'
+# App-specific optionalEntropy: fixed bytes of a constant app salt string.
+$script:DpapiEntropy = [System.Text.Encoding]::UTF8.GetBytes('OperaRADataLoader/v1')
 
 # ------------------------------------------------------------------------------
 # Logging helper
@@ -158,16 +180,23 @@ function Unprotect-DpapiValue {
         Internal: decrypts a DPAPI-encrypted string into plaintext, in-memory only.
 
     .DESCRIPTION
-        Converts a DPAPI-encrypted standard string (as produced by ConvertFrom-SecureString
-        under the Windows Data Protection API) back to a SecureString, then to plaintext
-        for immediate use in the token request body. The plaintext lives only in a local
-        variable and the caller is responsible for discarding it promptly.
+        Reverses whichever encryption scheme the value carries, so the loader can read a
+        hotels.json produced by Tools\Protect-HotelsConfig.ps1 with either scope, and
+        still read values written by the old scheme:
 
-        REQ-002: the decrypted value is never logged. On any decryption failure a generic
-        error is thrown that does not include the encrypted or decrypted material.
+          - "DPAPI:CU:v1:<b64>" -> ProtectedData.Unprotect(CurrentUser, entropy)
+          - "DPAPI:LM:v1:<b64>" -> ProtectedData.Unprotect(LocalMachine, entropy)
+          - legacy untagged hex  -> ConvertTo-SecureString (CurrentUser DPAPI)
+
+        The plaintext lives only in a local variable and the caller is responsible for
+        discarding it promptly.
+
+        REQ-002: the decrypted value is never logged. On any decryption failure a generic,
+        scheme-aware error is thrown that does not include the encrypted or decrypted
+        material.
 
     .PARAMETER EncryptedValue
-        The DPAPI-encrypted string.
+        The DPAPI-encrypted string (tagged or legacy).
 
     .PARAMETER FieldName
         A non-sensitive field label used only for error messages (e.g. 'ClientId').
@@ -189,16 +218,39 @@ function Unprotect-DpapiValue {
 
     $secure = $null
     $bstr = [IntPtr]::Zero
+    $cipherBytes = $null
+    $plainBytes = $null
     try {
+        if ($EncryptedValue.StartsWith($script:DpapiTagCurrentUser) -or
+            $EncryptedValue.StartsWith($script:DpapiTagLocalMachine)) {
+
+            $isLocalMachine = $EncryptedValue.StartsWith($script:DpapiTagLocalMachine)
+            $tag = if ($isLocalMachine) { $script:DpapiTagLocalMachine } else { $script:DpapiTagCurrentUser }
+            $dpScope = if ($isLocalMachine) {
+                [System.Security.Cryptography.DataProtectionScope]::LocalMachine
+            }
+            else {
+                [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+            }
+
+            $b64 = $EncryptedValue.Substring($tag.Length)
+            $cipherBytes = [System.Convert]::FromBase64String($b64)
+            $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                $cipherBytes, $script:DpapiEntropy, $dpScope)
+            return [System.Text.Encoding]::UTF8.GetString($plainBytes)
+        }
+
+        # Legacy untagged value produced by the old ConvertFrom-SecureString scheme.
         $secure = ConvertTo-SecureString -String $EncryptedValue -ErrorAction Stop
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
     }
     catch {
         # Never surface the encrypted or decrypted material in the error.
-        throw ("Failed to decrypt credential field '{0}'. Ensure it was DPAPI-encrypted by the same service account on this host (Tools\Protect-HotelsConfig.ps1)." -f $FieldName)
+        throw ("Failed to decrypt credential field '{0}'. For LocalMachine-protected values ensure the loader runs on the SAME host that ran Protect-HotelsConfig.ps1; for CurrentUser values ensure the SAME user + host." -f $FieldName)
     }
     finally {
+        if ($null -ne $plainBytes) { [System.Array]::Clear($plainBytes, 0, $plainBytes.Length) }
         if ($bstr -ne [IntPtr]::Zero) {
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
         }

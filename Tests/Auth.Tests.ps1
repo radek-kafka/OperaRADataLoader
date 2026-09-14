@@ -220,3 +220,88 @@ Describe 'Token response validation' -Skip:(-not $IsWindows) {
             Should -Throw -ExpectedMessage '*access_token*'
     }
 }
+
+Describe 'Tagged + legacy credential decryption via Get-OAuthToken (back-compat)' -Skip:(-not $IsWindows) {
+
+    BeforeAll {
+        # Mirror the tool's scheme constants + entropy exactly to produce tagged values.
+        $script:Entropy = [System.Text.Encoding]::UTF8.GetBytes('OperaRADataLoader/v1')
+
+        function New-TaggedDpapiValue {
+            param(
+                [string] $Plain,
+                [ValidateSet('CurrentUser', 'LocalMachine')]
+                [string] $Scope
+            )
+            $dpScope = if ($Scope -eq 'LocalMachine') {
+                [System.Security.Cryptography.DataProtectionScope]::LocalMachine
+            }
+            else {
+                [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+            }
+            $tag = if ($Scope -eq 'LocalMachine') { 'DPAPI:LM:v1:' } else { 'DPAPI:CU:v1:' }
+            $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($Plain)
+            $cipherBytes = [System.Security.Cryptography.ProtectedData]::Protect($plainBytes, $script:Entropy, $dpScope)
+            return ($tag + [System.Convert]::ToBase64String($cipherBytes))
+        }
+
+        # Build a hotel using tagged credential values.
+        function New-TaggedHotel {
+            param(
+                [string] $HotelCode,
+                [ValidateSet('CurrentUser', 'LocalMachine')]
+                [string] $Scope,
+                [string] $ClientId = 'tagged-client-id',
+                [string] $ClientSecret = 'tagged-client-secret'
+            )
+            @{
+                hotelCode    = $HotelCode
+                gatewayUrl   = 'https://example-gateway.oracle.com/'
+                clientId     = (New-TaggedDpapiValue -Plain $ClientId -Scope $Scope)
+                clientSecret = (New-TaggedDpapiValue -Plain $ClientSecret -Scope $Scope)
+            }
+        }
+    }
+
+    It 'decrypts a CU-tagged (CurrentUser) value into the request body' {
+        Clear-TokenCache -HotelCode 'HOTELCU'
+        $cap = @{}
+        $mock = New-MockTokenRequest -Capture $cap
+        $hotel = New-TaggedHotel -HotelCode 'HOTELCU' -Scope CurrentUser -ClientId 'CU-CID' -ClientSecret 'CU-SEC'
+
+        $null = Get-OAuthToken -Hotel $hotel -TokenRequest $mock
+
+        $cap.LastRequest.Body | Should -Match 'client_id=CU-CID'
+        $cap.LastRequest.Body | Should -Match 'client_secret=CU-SEC'
+    }
+
+    It 'decrypts an LM-tagged (LocalMachine) value into the request body' {
+        Clear-TokenCache -HotelCode 'HOTELLM'
+        $cap = @{}
+        $mock = New-MockTokenRequest -Capture $cap
+        $hotel = New-TaggedHotel -HotelCode 'HOTELLM' -Scope LocalMachine -ClientId 'LM-CID' -ClientSecret 'LM-SEC'
+
+        $null = Get-OAuthToken -Hotel $hotel -TokenRequest $mock
+
+        $cap.LastRequest.Body | Should -Match 'client_id=LM-CID'
+        $cap.LastRequest.Body | Should -Match 'client_secret=LM-SEC'
+    }
+
+    It 'still decrypts a LEGACY untagged value (produced by the old ConvertFrom-SecureString path)' {
+        Clear-TokenCache -HotelCode 'HOTELLEGACY'
+        $cap = @{}
+        $mock = New-MockTokenRequest -Capture $cap
+        # New-DpapiValue is the old-scheme helper defined in the top-level BeforeAll.
+        $hotel = @{
+            hotelCode    = 'HOTELLEGACY'
+            gatewayUrl   = 'https://example-gateway.oracle.com/'
+            clientId     = (New-DpapiValue -Plain 'LEGACY-CID')
+            clientSecret = (New-DpapiValue -Plain 'LEGACY-SEC')
+        }
+
+        $null = Get-OAuthToken -Hotel $hotel -TokenRequest $mock
+
+        $cap.LastRequest.Body | Should -Match 'client_id=LEGACY-CID'
+        $cap.LastRequest.Body | Should -Match 'client_secret=LEGACY-SEC'
+    }
+}

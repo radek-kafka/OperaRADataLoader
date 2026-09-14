@@ -56,23 +56,38 @@ verbatim.
 If you use email alerts, also put the real shared SMTP `username` / `password` into
 `Config\settings.json` (`smtp` block) before the next step so they get encrypted in place.
 
-### 2.3 Encrypt credentials — run `Protect-HotelsConfig.ps1` AS the service account
+### 2.3 Encrypt credentials — run `Protect-HotelsConfig.ps1` on the loader's host
 
-DPAPI ciphertext produced here can **only** be decrypted by the **same Windows account on the same
-machine**. Therefore run this on the host the loader will run on, logged on as (or `runas`) the
-scheduled service account.
+DPAPI ciphertext produced here is always **host-bound** (moving to another host requires
+re-encrypting). You choose **who** can decrypt it with the `-Scope` switch:
+
+| `-Scope` | Who can decrypt | When to use |
+|----------|-----------------|-------------|
+| `CurrentUser` (default) | Only the **same Windows user** on the **same host** | Simplest. Run this tool logged on as (or `runas`) the exact service account the loader runs as. |
+| `LocalMachine` | **Any account** on the **same host** | Recommended when the loader runs under a **service account / gMSA** that differs from the person running this tool — you only need to run it on the same host, not as that account. |
+
+**Which should I pick?** If you can easily run the tool as the loader's service account, `CurrentUser`
+is the tightest option. If the encryption is done by an admin/deployment identity while the loader
+runs under a separate service account or gMSA, use `LocalMachine`. Both remain bound to the host, so
+either way run the tool **on the host the loader will run on**.
 
 ```powershell
-# On the loader's host, as the loader's service account:
+# CurrentUser (default) — run as the loader's service account, on the loader's host:
 pwsh -File .\Tools\Protect-HotelsConfig.ps1
+
+# LocalMachine — run on the loader's host under any account:
+pwsh -File .\Tools\Protect-HotelsConfig.ps1 -Scope LocalMachine
 ```
 
 This reads `Config\hotels.input.json`, encrypts `clientId` / `clientSecret` / `apiKey` per hotel,
 **round-trip-verifies each value** (aborts without writing if any value fails to decrypt back to the
-original), and writes the encrypted `Config\hotels.json`. Unless you pass `-SkipSmtp`, it also
-encrypts `smtp.username` / `smtp.password` in `Config\settings.json` in place. Re-runs are
-idempotent (already-encrypted values are detected and left unchanged). Useful switches:
+original), and writes the encrypted `Config\hotels.json`. Each encrypted value is **self-describing**
+— it carries a scheme tag (`DPAPI:CU:v1:…` or `DPAPI:LM:v1:…`) so the loader knows how to decrypt it
+with no extra config. Unless you pass `-SkipSmtp`, it also encrypts `smtp.username` / `smtp.password`
+in `Config\settings.json` in place. Re-runs are idempotent (already-encrypted values are detected and
+left unchanged). Useful switches:
 
+- `-Scope CurrentUser|LocalMachine` — choose the DPAPI protection scope (default `CurrentUser`).
 - `-WhatIf` — preview without writing.
 - `-SkipSmtp` — only process hotels.
 - `-Force` — overwrite an existing `hotels.json` without prompting.
@@ -113,8 +128,10 @@ through `SQL\005_CreateIndexes.sql` in order; all scripts are guarded with `IF O
 
 ## 3. Scheduling
 
-Run the loader as the **same service account** that ran `Protect-HotelsConfig.ps1` on the **same host**
-— otherwise the DPAPI-encrypted credentials will not decrypt.
+Run the loader on the **same host** that ran `Protect-HotelsConfig.ps1` — otherwise the DPAPI-encrypted
+credentials will not decrypt. If you encrypted with `-Scope CurrentUser` (default), the loader must
+also run as the **same Windows user** that ran the tool. If you encrypted with `-Scope LocalMachine`,
+any account on that host can decrypt, so the loader's service account need not match.
 
 ### 3.1 Windows Task Scheduler (XML template)
 
@@ -345,13 +362,21 @@ All dimension tables carry SCD2 columns `VALID_FROM DATE NOT NULL`, `VALID_TO DA
 
 ### 6.2 DPAPI decryption failures
 
-Symptom: startup fails per hotel with *"Credential '<field>' failed to decrypt (was it encrypted by
-this service account on this host?)."* DPAPI ciphertext is bound to the **user + machine** that
-produced it. Causes and fix:
+Symptom: startup fails per hotel with *"Failed to decrypt credential field '<field>'. For
+LocalMachine-protected values ensure the loader runs on the SAME host that ran
+Protect-HotelsConfig.ps1; for CurrentUser values ensure the SAME user + host."* DPAPI ciphertext is
+always host-bound; the user binding depends on the `-Scope` chosen at encryption time (the scope is
+embedded in each value's `DPAPI:CU:` / `DPAPI:LM:` tag). Causes and fix:
 
-- The loader is running as a **different account** or on a **different host** than the one that ran
-  `Protect-HotelsConfig.ps1`. Re-run the tool as the correct service account on the correct host.
+- The loader is running on a **different host** than the one that ran `Protect-HotelsConfig.ps1`.
+  Re-run the tool on the correct host (both scopes are host-bound).
+- The value was encrypted with `-Scope CurrentUser` but the loader runs as a **different Windows
+  account**. Either re-run the tool as the loader's service account, or re-encrypt with
+  `-Scope LocalMachine` so any account on the host can decrypt.
 - `hotels.json` was copied from another machine. Regenerate it locally rather than copying.
+- **Legacy values** (encrypted before scope tags existed, stored as an untagged hex string) are still
+  supported — the loader detects and decrypts them via the original CurrentUser path, so existing
+  deployments keep working without re-encryption.
 
 ### 6.3 Late postings
 

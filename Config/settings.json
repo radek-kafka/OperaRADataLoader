@@ -38,6 +38,10 @@
     "sqlLogging": true,
     "logName": "OperaRA_Loader"
   },
+  "security": {
+    "dpapiScope": "CurrentUser",
+    "_comment": "Informational only. The actual DPAPI scope used for each secret is embedded in that value's ciphertext tag (DPAPI:CU: = CurrentUser, DPAPI:LM: = LocalMachine). Choose the scope at encryption time via Tools\\Protect-HotelsConfig.ps1 -Scope CurrentUser|LocalMachine; this field just records the intended choice."
+  },
   "smtp": {
     "enabled": false,
     "smtpServer": "REPLACE_ME-smtp-relay-host",
@@ -47,7 +51,7 @@
     "fromDisplayName": "OPERA R&A Loader",
     "authRequired": true,
     "username": "REPLACE_ME-smtp-username",
-    "password": "REPLACE_ME-smtp-password (DPAPI-encrypted by Protect-HotelsConfig.ps1)",
+    "password": "REPLACE_ME-smtp-password (DPAPI-encrypted by Protect-HotelsConfig.ps1; scope selectable via -Scope CurrentUser|LocalMachine)",
     "maxInlineEntriesPerEmail": 50
   }
 }

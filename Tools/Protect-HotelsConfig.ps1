@@ -17,12 +17,35 @@
       Per hotel (hotels.input.json -> hotels.json):  clientId, clientSecret, apiKey
       Shared SMTP (settings.json, encrypted in place): smtp.username, smtp.password
 
-    Encryption matches Modules\Auth.psm1 (Unprotect-DpapiValue) exactly so the values
-    round-trip at runtime. Auth.psm1 decrypts with:
-        ConvertTo-SecureString -String <cipher>            # DPAPI, no -Key
-    so this script encrypts with:
-        ConvertTo-SecureString -String <plain> -AsPlainText -Force | ConvertFrom-SecureString
-    which uses DPAPI scoped to the CURRENT USER + CURRENT MACHINE (no external key).
+    Encryption uses the .NET [System.Security.Cryptography.ProtectedData] API for BOTH
+    scopes so they behave symmetrically. Each encrypted value is a SELF-DESCRIBING
+    string carrying a scheme tag prefix so the runtime decryptor knows how to reverse
+    it WITHOUT any extra config:
+
+        "DPAPI:CU:v1:<base64>"   CurrentUser  scope (default)
+        "DPAPI:LM:v1:<base64>"   LocalMachine scope (-Scope LocalMachine)
+
+    where <base64> is the Base64 of the ProtectedData ciphertext bytes
+    (UTF-8 plaintext -> bytes -> ProtectedData.Protect -> Base64). An app-specific
+    optionalEntropy (fixed bytes of "OperaRADataLoader/v1") is passed to both Protect
+    and Unprotect so not every process on the box can trivially decrypt LocalMachine
+    values.
+
+    Modules\Auth.psm1 (Unprotect-DpapiValue) decrypts these tagged values with the SAME
+    tag constants and entropy salt, and ALSO falls back to the legacy untagged
+    ConvertTo-SecureString path so values already in a deployed hotels.json keep working.
+
+    NOTE (keep in sync): the tag constants and entropy salt below are duplicated in
+    Modules\Auth.psm1. If you change them here, change them there too.
+
+    Scope guidance:
+      - CurrentUser  : ciphertext is decryptable only by the SAME Windows user on the
+                       SAME host. Simplest; matches the historical behaviour.
+      - LocalMachine : ciphertext is decryptable by ANY account on the SAME host
+                       (recommended for service-account / gMSA setups where the person
+                       running this tool differs from the loader's run-as identity).
+      A LocalMachine value produced here is still host-bound — moving hosts requires
+      re-encrypting.
 
     All other (non-secret) fields — otbFutureDays, blockFutureDays, nightAuditHour,
     timeZoneId, emailAlerts, gatewayUrl, hotelCode, chainCode, enterpriseId, etc. — are
@@ -41,6 +64,14 @@
     settings.json holding the shared smtp.username / smtp.password. Default: Config\settings.json.
     The SMTP secrets are encrypted in place (the file is rewritten with ciphertext).
 
+.PARAMETER Scope
+    The DPAPI protection scope to encrypt with. One of:
+      CurrentUser  (default) — decryptable only by the SAME Windows user on the SAME host.
+      LocalMachine           — decryptable by ANY account on the SAME host (recommended
+                               for service-account / gMSA setups).
+    The chosen scope is embedded in each value's scheme tag, so decryption needs no extra
+    config. Both scopes are host-bound; moving hosts requires re-encrypting.
+
 .PARAMETER SkipSmtp
     Skip encrypting the shared SMTP credentials in settings.json (only process hotels).
 
@@ -49,14 +80,25 @@
 
 .NOTES
     ── SERVICE ACCOUNT SETUP (READ THIS) ─────────────────────────────────────────────
-    DPAPI (user + machine scoped) means the ciphertext produced here can ONLY be
-    decrypted by the SAME Windows user account on the SAME machine. Therefore:
+    DPAPI ciphertext produced here is ALWAYS host-bound. The user binding depends on the
+    chosen -Scope:
 
+      -Scope CurrentUser  (default): decryptable only by the SAME Windows user on the
+                          SAME host. Run this script logged on as (or `runas`) the exact
+                          service account the loader runs as, on the loader's host.
+      -Scope LocalMachine : decryptable by ANY account on the SAME host. You no longer
+                          must run this tool as the exact service account — only on the
+                          same host the loader runs on. Recommended when the loader runs
+                          under a service account / gMSA that differs from the person
+                          running this tool.
+
+    Steps:
       1. Determine the service account the scheduled loader (Run-OperaRALoader.ps1) will
          run as (e.g. the Task Scheduler / SQL Agent identity), and the host it runs on.
-      2. Log on to THAT host AS THAT service account (or use `runas /user:<account>`),
-         and run this script there. Running it as yourself, or on a different machine,
-         produces ciphertext the loader cannot decrypt.
+      2. With -Scope CurrentUser: log on to THAT host AS THAT service account (or use
+         `runas /user:<account>`) and run this script there. With -Scope LocalMachine:
+         run it on THAT host under any account. Either way, running it on a DIFFERENT
+         machine produces ciphertext the loader cannot decrypt.
       3. Copy Config\hotels.sample.json to Config\hotels.input.json, replace every
          REPLACE_ME placeholder with the real clientId / clientSecret / apiKey, and put
          the real smtp username / password into Config\settings.json.
@@ -68,8 +110,13 @@
     This is Windows-only (DPAPI). On non-Windows hosts the script stops with an error.
 
 .EXAMPLE
-    # Run AS the loader's service account, ON the loader's host:
+    # CurrentUser (default): run AS the loader's service account, ON the loader's host:
     pwsh -File .\Tools\Protect-HotelsConfig.ps1
+
+.EXAMPLE
+    # LocalMachine: run on the loader's host (any account); the loader's service account
+    # can then decrypt without being the account that ran this tool:
+    pwsh -File .\Tools\Protect-HotelsConfig.ps1 -Scope LocalMachine
 
 .EXAMPLE
     # Custom paths, only the hotels file (skip SMTP), overwrite existing output:
@@ -92,6 +139,10 @@ param(
     [string] $SettingsPath = (Join-Path $PSScriptRoot '..\Config\settings.json'),
 
     [Parameter()]
+    [ValidateSet('CurrentUser', 'LocalMachine')]
+    [string] $Scope = 'CurrentUser',
+
+    [Parameter()]
     [switch] $SkipSmtp,
 
     [Parameter()]
@@ -105,15 +156,37 @@ param(
 # The per-hotel secret fields that must be encrypted. All other fields pass through.
 $script:HotelSecretFields = @('clientId', 'clientSecret', 'apiKey')
 
+# ------------------------------------------------------------------------------
+# Self-describing DPAPI scheme constants.
+#
+# KEEP IN SYNC with Modules\Auth.psm1 (Unprotect-DpapiValue). If you change the tag
+# prefixes or the entropy salt here, change them in Auth.psm1 too, or already-encrypted
+# values will stop decrypting at runtime.
+#
+# Tagged format:  "DPAPI:<scope>:v1:<base64>"
+#   <scope>  = 'CU' (CurrentUser) | 'LM' (LocalMachine)
+#   <base64> = Base64( ProtectedData.Protect( UTF8(plaintext), entropy, scope ) )
+# ------------------------------------------------------------------------------
+$script:DpapiTagCurrentUser  = 'DPAPI:CU:v1:'
+$script:DpapiTagLocalMachine = 'DPAPI:LM:v1:'
+# App-specific optionalEntropy: fixed bytes of a constant app salt string so not every
+# process on the box can trivially decrypt LocalMachine values.
+$script:DpapiEntropy = [System.Text.Encoding]::UTF8.GetBytes('OperaRADataLoader/v1')
+
 function Protect-DpapiValue {
     <#
     .SYNOPSIS
-        DPAPI-encrypts a plaintext string into a standard string (user + machine scoped).
+        DPAPI-encrypts a plaintext string into a self-describing tagged string.
     .DESCRIPTION
-        Produces exactly what Modules\Auth.psm1 (Unprotect-DpapiValue) decrypts:
-            ConvertTo-SecureString -AsPlainText -Force | ConvertFrom-SecureString
-        No -Key is supplied, so DPAPI protection is bound to the current user + machine.
-        The plaintext is never logged. The SecureString is disposed after use.
+        Uses [System.Security.Cryptography.ProtectedData]::Protect with the requested
+        -Scope (CurrentUser or LocalMachine) and the app-specific optionalEntropy, then
+        Base64-encodes the ciphertext and prefixes the scheme tag:
+
+            CurrentUser  -> "DPAPI:CU:v1:<base64>"
+            LocalMachine -> "DPAPI:LM:v1:<base64>"
+
+        Modules\Auth.psm1 (Unprotect-DpapiValue) reverses this using the SAME tag
+        constants and entropy salt. The plaintext is never logged.
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -124,29 +197,50 @@ function Protect-DpapiValue {
 
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
-        [string] $FieldName
+        [string] $FieldName,
+
+        [Parameter()]
+        [ValidateSet('CurrentUser', 'LocalMachine')]
+        [string] $Scope = 'CurrentUser'
     )
 
-    $secure = $null
+    $plainBytes = $null
     try {
-        $secure = ConvertTo-SecureString -String $Plain -AsPlainText -Force -ErrorAction Stop
-        return ($secure | ConvertFrom-SecureString -ErrorAction Stop)
+        $dpScope = if ($Scope -eq 'LocalMachine') {
+            [System.Security.Cryptography.DataProtectionScope]::LocalMachine
+        }
+        else {
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        }
+        $tag = if ($Scope -eq 'LocalMachine') { $script:DpapiTagLocalMachine } else { $script:DpapiTagCurrentUser }
+
+        $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($Plain)
+        $cipherBytes = [System.Security.Cryptography.ProtectedData]::Protect(
+            $plainBytes, $script:DpapiEntropy, $dpScope)
+        return ($tag + [System.Convert]::ToBase64String($cipherBytes))
     }
     catch {
-        throw ("Failed to encrypt credential field '{0}'. Ensure this script runs on Windows as the loader's service account." -f $FieldName)
+        throw ("Failed to encrypt credential field '{0}' with scope '{1}'. Ensure this script runs on Windows." -f $FieldName, $Scope)
     }
     finally {
-        if ($secure) { $secure.Dispose() }
+        if ($null -ne $plainBytes) { [System.Array]::Clear($plainBytes, 0, $plainBytes.Length) }
     }
 }
 
 function Unprotect-DpapiValue {
     <#
     .SYNOPSIS
-        Decrypts a DPAPI standard string back to plaintext (used only for round-trip verify).
+        Decrypts a DPAPI value back to plaintext (used only for round-trip verify).
     .DESCRIPTION
-        Mirrors Modules\Auth.psm1's runtime decryption so the round-trip check proves the
-        value the loader will read decrypts to the original plaintext. Never logs material.
+        Reverses Protect-DpapiValue's tagged format and also handles legacy untagged
+        values so the round-trip check proves the value the loader will read decrypts to
+        the original plaintext:
+
+          - "DPAPI:CU:v1:<b64>" -> ProtectedData.Unprotect (CurrentUser + entropy)
+          - "DPAPI:LM:v1:<b64>" -> ProtectedData.Unprotect (LocalMachine + entropy)
+          - legacy untagged hex  -> ConvertTo-SecureString (CurrentUser DPAPI)
+
+        Mirrors Modules\Auth.psm1's runtime decryption exactly. Never logs material.
     #>
     [CmdletBinding()]
     [OutputType([string])]
@@ -162,7 +256,29 @@ function Unprotect-DpapiValue {
 
     $secure = $null
     $bstr = [IntPtr]::Zero
+    $cipherBytes = $null
+    $plainBytes = $null
     try {
+        if ($EncryptedValue.StartsWith($script:DpapiTagCurrentUser) -or
+            $EncryptedValue.StartsWith($script:DpapiTagLocalMachine)) {
+
+            $isLocalMachine = $EncryptedValue.StartsWith($script:DpapiTagLocalMachine)
+            $tag = if ($isLocalMachine) { $script:DpapiTagLocalMachine } else { $script:DpapiTagCurrentUser }
+            $dpScope = if ($isLocalMachine) {
+                [System.Security.Cryptography.DataProtectionScope]::LocalMachine
+            }
+            else {
+                [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+            }
+
+            $b64 = $EncryptedValue.Substring($tag.Length)
+            $cipherBytes = [System.Convert]::FromBase64String($b64)
+            $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
+                $cipherBytes, $script:DpapiEntropy, $dpScope)
+            return [System.Text.Encoding]::UTF8.GetString($plainBytes)
+        }
+
+        # Legacy untagged value produced by the old ConvertFrom-SecureString scheme.
         $secure = ConvertTo-SecureString -String $EncryptedValue -ErrorAction Stop
         $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         return [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
@@ -171,6 +287,7 @@ function Unprotect-DpapiValue {
         throw ("Failed to decrypt credential field '{0}' during round-trip verification." -f $FieldName)
     }
     finally {
+        if ($null -ne $plainBytes) { [System.Array]::Clear($plainBytes, 0, $plainBytes.Length) }
         if ($bstr -ne [IntPtr]::Zero) {
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
         }
@@ -183,9 +300,11 @@ function Test-DpapiEncrypted {
     .SYNOPSIS
         Heuristic: does a value already look like DPAPI ciphertext (so we can skip it)?
     .DESCRIPTION
-        DPAPI standard strings from ConvertFrom-SecureString are long hex strings
-        (>= 100 hex chars in practice). Plain-text credentials / REPLACE_ME placeholders
-        will not match, so idempotent re-runs skip already-encrypted values.
+        Recognises BOTH forms so idempotent re-runs skip already-encrypted values:
+          - the new tagged form ("DPAPI:CU:" / "DPAPI:LM:" prefix), and
+          - the legacy untagged form (a long hex string, >= 100 hex chars, from the old
+            ConvertFrom-SecureString scheme).
+        Plain-text credentials / REPLACE_ME placeholders match neither.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
@@ -194,6 +313,9 @@ function Test-DpapiEncrypted {
         [AllowEmptyString()]
         [string] $Value
     )
+    if ($Value.StartsWith('DPAPI:CU:') -or $Value.StartsWith('DPAPI:LM:')) {
+        return $true
+    }
     return ($Value -match '^[0-9a-fA-F]{100,}$')
 }
 
@@ -222,6 +344,10 @@ function Protect-ConfigValue {
         [string] $FieldName,
 
         [Parameter()]
+        [ValidateSet('CurrentUser', 'LocalMachine')]
+        [string] $Scope = 'CurrentUser',
+
+        [Parameter()]
         [scriptblock] $Encryptor,
 
         [Parameter()]
@@ -229,7 +355,7 @@ function Protect-ConfigValue {
     )
 
     if (-not $Encryptor) {
-        $Encryptor = { param($p, $f) Protect-DpapiValue -Plain $p -FieldName $f }
+        $Encryptor = { param($p, $f) Protect-DpapiValue -Plain $p -FieldName $f -Scope $Scope }.GetNewClosure()
     }
     if (-not $Verifier) {
         $Verifier = { param($c, $f) Unprotect-DpapiValue -EncryptedValue $c -FieldName $f }
@@ -267,6 +393,10 @@ function Protect-HotelObject {
         $Hotel,
 
         [Parameter()]
+        [ValidateSet('CurrentUser', 'LocalMachine')]
+        [string] $Scope = 'CurrentUser',
+
+        [Parameter()]
         [scriptblock] $Encryptor,
 
         [Parameter()]
@@ -289,7 +419,7 @@ function Protect-HotelObject {
                 $result[$name] = $plain
             }
             else {
-                $result[$name] = Protect-ConfigValue -Plain $plain -FieldName ("{0}.{1}" -f $hotelCode, $name) -Encryptor $Encryptor -Verifier $Verifier
+                $result[$name] = Protect-ConfigValue -Plain $plain -FieldName ("{0}.{1}" -f $hotelCode, $name) -Scope $Scope -Encryptor $Encryptor -Verifier $Verifier
             }
         }
         else {
@@ -317,6 +447,10 @@ function ConvertTo-EncryptedHotelsConfig {
         $InputConfig,
 
         [Parameter()]
+        [ValidateSet('CurrentUser', 'LocalMachine')]
+        [string] $Scope = 'CurrentUser',
+
+        [Parameter()]
         [scriptblock] $Encryptor,
 
         [Parameter()]
@@ -328,7 +462,7 @@ function ConvertTo-EncryptedHotelsConfig {
     }
 
     $encryptedHotels = foreach ($hotel in @($InputConfig.hotels)) {
-        Protect-HotelObject -Hotel $hotel -Encryptor $Encryptor -Verifier $Verifier
+        Protect-HotelObject -Hotel $hotel -Scope $Scope -Encryptor $Encryptor -Verifier $Verifier
     }
 
     $out = [ordered]@{}
@@ -358,6 +492,10 @@ function Protect-SmtpSettings {
         $Settings,
 
         [Parameter()]
+        [ValidateSet('CurrentUser', 'LocalMachine')]
+        [string] $Scope = 'CurrentUser',
+
+        [Parameter()]
         [scriptblock] $Encryptor,
 
         [Parameter()]
@@ -382,7 +520,7 @@ function Protect-SmtpSettings {
             Write-Verbose ("smtp.{0} already looks DPAPI-encrypted; leaving unchanged (idempotent)." -f $field)
             continue
         }
-        $cipher = Protect-ConfigValue -Plain $plain -FieldName ("smtp.{0}" -f $field) -Encryptor $Encryptor -Verifier $Verifier
+        $cipher = Protect-ConfigValue -Plain $plain -FieldName ("smtp.{0}" -f $field) -Scope $Scope -Encryptor $Encryptor -Verifier $Verifier
         $smtp.$field = $cipher
         $changed = $true
     }
@@ -412,6 +550,7 @@ try {
     Write-Verbose ("Input : {0}" -f $InputPath)
     Write-Verbose ("Output: {0}" -f $OutputPath)
     Write-Verbose ("SMTP  : {0}" -f $SettingsPath)
+    Write-Verbose ("Scope : {0}" -f $Scope)
 
     if (-not (Test-Path -LiteralPath $InputPath)) {
         throw ("Input file not found: {0}. Copy Config\hotels.sample.json to hotels.input.json and fill in real credentials first." -f $InputPath)
@@ -423,7 +562,7 @@ try {
     Write-Verbose ("Read {0} hotel(s) from input." -f $hotelCount)
 
     # --- Encrypt + round-trip verify every hotel secret. ---------------------
-    $encrypted = ConvertTo-EncryptedHotelsConfig -InputConfig $inputConfig
+    $encrypted = ConvertTo-EncryptedHotelsConfig -InputConfig $inputConfig -Scope $Scope
 
     # --- Write hotels.json only after ALL values verified. -------------------
     if (Test-Path -LiteralPath $OutputPath) {
@@ -436,7 +575,7 @@ try {
     $json = $encrypted | ConvertTo-Json -Depth 20
     if ($PSCmdlet.ShouldProcess($OutputPath, 'Write encrypted hotels config')) {
         Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
-        Write-Host ("Wrote encrypted hotels config for {0} hotel(s): {1}" -f $hotelCount, $OutputPath)
+        Write-Host ("Wrote encrypted hotels config ({0} scope) for {1} hotel(s): {2}" -f $Scope, $hotelCount, $OutputPath)
     }
     else {
         Write-Host ("[WhatIf] Would write encrypted hotels config for {0} hotel(s): {1}" -f $hotelCount, $OutputPath)
@@ -449,7 +588,7 @@ try {
         }
         else {
             $settings = Get-Content -LiteralPath $SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
-            $smtpChanged = Protect-SmtpSettings -Settings $settings
+            $smtpChanged = Protect-SmtpSettings -Settings $settings -Scope $Scope
             if ($smtpChanged) {
                 $settingsJson = $settings | ConvertTo-Json -Depth 20
                 if ($PSCmdlet.ShouldProcess($SettingsPath, 'Write encrypted SMTP credentials')) {

@@ -1,5 +1,5 @@
 {
-  "_comment": "SAMPLE hotel configuration template (plain text, NO real credentials). Copy this file to Config\\hotels.input.json, replace every REPLACE_ME placeholder with real values, then run Tools\\Protect-HotelsConfig.ps1 to produce the DPAPI-encrypted Config\\hotels.json. Never commit hotels.input.json or hotels.json to source control.",
+  "_comment": "SAMPLE hotel configuration template (plain text, NO real credentials). Copy this file to Config\\hotels.input.json, replace every REPLACE_ME placeholder with real values, then run Tools\\Protect-HotelsConfig.ps1 to produce the DPAPI-encrypted Config\\hotels.json. Pick the DPAPI scope with -Scope CurrentUser (default; same Windows user + host) or -Scope LocalMachine (any account on the same host; recommended for service-account / gMSA setups). Never commit hotels.input.json or hotels.json to source control.",
   "hotels": [
     {
       "hotelCode": "HOTEL1",

@@ -108,10 +108,24 @@ Describe 'Round-trip verification' {
         $cipher | Should -Be 'ENC:secret-value'
     }
 
-    It 'real DPAPI round-trips through Protect-DpapiValue / Unprotect-DpapiValue' -Skip:(-not $IsWindows) {
+    It 'real DPAPI (CurrentUser default) round-trips through Protect-DpapiValue / Unprotect-DpapiValue' -Skip:(-not $IsWindows) {
         $plain = 'client-secret-!@#$%'
         $cipher = Protect-DpapiValue -Plain $plain -FieldName 'clientSecret'
         $cipher | Should -Not -Be $plain
+        (Unprotect-DpapiValue -EncryptedValue $cipher -FieldName 'clientSecret') | Should -Be $plain
+    }
+
+    It 'CurrentUser scope produces a DPAPI:CU: tag and round-trips' -Skip:(-not $IsWindows) {
+        $plain = 'cu-secret-value-123'
+        $cipher = Protect-DpapiValue -Plain $plain -FieldName 'clientSecret' -Scope CurrentUser
+        $cipher | Should -Match '^DPAPI:CU:v1:'
+        (Unprotect-DpapiValue -EncryptedValue $cipher -FieldName 'clientSecret') | Should -Be $plain
+    }
+
+    It 'LocalMachine scope produces a DPAPI:LM: tag and round-trips' -Skip:(-not $IsWindows) {
+        $plain = 'lm-secret-value-456'
+        $cipher = Protect-DpapiValue -Plain $plain -FieldName 'clientSecret' -Scope LocalMachine
+        $cipher | Should -Match '^DPAPI:LM:v1:'
         (Unprotect-DpapiValue -EncryptedValue $cipher -FieldName 'clientSecret') | Should -Be $plain
     }
 }
@@ -173,8 +187,19 @@ Describe 'SMTP settings encryption' {
 Describe 'Idempotency' {
 
     It 'skips values that already look DPAPI-encrypted' {
-        $alreadyEnc = ('a' * 120)  # long hex-like string
+        $alreadyEnc = ('a' * 120)  # long hex-like string (legacy scheme)
         Test-DpapiEncrypted -Value $alreadyEnc | Should -BeTrue
         Test-DpapiEncrypted -Value 'plain-client-id' | Should -BeFalse
+    }
+
+    It 'recognises tagged CU/LM forms and the legacy hex form, rejects plaintext' {
+        # New tagged forms (base64 payload does not need to be valid to be recognised).
+        Test-DpapiEncrypted -Value 'DPAPI:CU:v1:AAAA' | Should -BeTrue
+        Test-DpapiEncrypted -Value 'DPAPI:LM:v1:AAAA' | Should -BeTrue
+        # Legacy long-hex form.
+        Test-DpapiEncrypted -Value ('0123456789abcdef' * 8) | Should -BeTrue
+        # Plaintext / placeholders.
+        Test-DpapiEncrypted -Value 'REPLACE_ME-clientSecret' | Should -BeFalse
+        Test-DpapiEncrypted -Value 'plain-value' | Should -BeFalse
     }
 }
