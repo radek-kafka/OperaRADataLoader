@@ -52,3 +52,8 @@ $RECYCLE.BIN/
 *~
 *.swp
 .vs/
+
+# --- Restricted spec/sample content (purged from history 2024) ---------------
+# Oracle/Infor-derived material — must never be published to GitHub.
+CSVSampleSpec/Design_Document-DHR_Exporte_INFOR_v1.3.md
+CSVSampleSpec/extracted_pdf_text.txt
