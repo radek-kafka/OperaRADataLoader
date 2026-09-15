@@ -1,6 +1,8 @@
-# Requirements: OPERA R&A Data Loader
+# Requirements Document
 
-## Overview
+**Project:** OPERA R&A Data Loader
+
+## Introduction
 A production-ready PowerShell 7 solution that connects to the Oracle Hospitality Integration Platform (OHIP) R&A Data APIs, executes **GraphQL queries** against R&A Subject Areas for reservation statistics, financial transactions, on-the-books forecasts, block reservations, room inventory, and master data, then stores results in Microsoft SQL Server tables. The solution supports multiple hotels across multiple hotel chains with secure, configurable credentials per property.
 
 > **API Technology:** The OHIP R&A Data APIs are **GraphQL** APIs (not REST), accessed via a single HTTP POST endpoint at `<gatewayUrl>/rna/v1/graphql/`. Each Subject Area is a separate named GraphQL operation. Schemas are published at [oracle/hospitality-api-docs](https://github.com/oracle/hospitality-api-docs).
