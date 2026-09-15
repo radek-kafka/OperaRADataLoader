@@ -34,6 +34,29 @@ Master Data (full/delta refresh)
 
 ---
 
+## Requirements Summary
+
+| ID | Title | Priority |
+|--------|-------------------------------------------|----------|
+| REQ-001 | Multi-Hotel Configuration | MUST |
+| REQ-002 | Secure Credential Storage | MUST |
+| REQ-003 | Authentication (OAuth 2.0 — OHIP / OCIM) | MUST |
+| REQ-004 | Reservation Statistics (Actuals) | MUST |
+| REQ-005 | Financial Transactions (Actuals) | MUST |
+| REQ-006 | On-The-Books (OTB) Snapshot | MUST |
+| REQ-007 | Block Reservations Snapshot | MUST |
+| REQ-008 | Room Inventory | MUST |
+| REQ-009 | Master Data Lists | MUST |
+| REQ-010 | SQL Server Storage | MUST |
+| REQ-011 | API Rate Limiting & Resilience | MUST |
+| REQ-012 | Logging & Monitoring | MUST |
+| REQ-013 | Scheduling & Execution Modes | MUST |
+| REQ-014 | Time Zone Handling | MUST |
+| REQ-015 | Fallback & Missing Data Handling | MUST |
+| REQ-016 | Severity-Based Email Notifications | MUST |
+
+---
+
 ## Requirements
 
 ### REQ-001 – Multi-Hotel Configuration
@@ -192,3 +215,70 @@ Master Data (full/delta refresh)
 - **SHOULD** support a global toggle (`smtp.enabled = false`) that disables all email notifications regardless of per-severity settings, for environments where email is unavailable (e.g. CI/CD).
 - **SHOULD** de-duplicate or cap the number of inline entries per email (configurable max, with a "N more — see attached log" note) to keep messages readable when a run generates many entries.
 - **SHOULD** respect the `-DryRun` switch: notifications are still evaluated but clearly marked as a dry-run in the subject/body.
+
+---
+
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **Business Date** | The hotel's operational date as defined by the night-audit cutover, not wall-clock midnight. All actuals (`ReservationStats`, `FinancialTx`) are keyed to this date. |
+| **Snapshot Date** | The business date on which a forward-looking snapshot (OTB, blocks, inventory) was pulled — i.e. "as of" date. |
+| **Considered Date** | The future stay date that a snapshot row describes (e.g. the `stayDate` an OTB row forecasts, or a block's grid date). |
+| **Late Posting** | A financial transaction whose `trxDate` is later than the `businessDate` it posts to (`trxDate > businessDate`). |
+| **OTB** | On-The-Books — future occupancy/revenue committed as of a snapshot date. |
+| **ADR** | Average Daily Rate — room revenue divided by rooms sold. |
+| **RevPAR** | Revenue Per Available Room — room revenue divided by available rooms. |
+| **Pickup** | Rooms actually reserved against a group block (`pickedUpRooms`) versus rooms contracted (`blockedRooms`). |
+| **Cutoff Date** | The date after which unsold block rooms are released back to general inventory. |
+| **OOO / OOS** | Out Of Order / Out Of Service — rooms removed from sellable inventory. |
+| **Subject Area** | A named GraphQL operation exposed by the OHIP R&A Data API (e.g. `StatisticsReservationsDaily`). |
+| **SCD Type 2** | Slowly Changing Dimension history: a master-data change inserts a new version row with `ValidFrom` / `ValidTo` rather than overwriting. |
+| **OHIP** | Oracle Hospitality Integration Platform. |
+| **OCIM** | Oracle Cloud Identity Management — the identity platform issuing OAuth tokens. |
+| **R&A** | Reporting & Analytics — the OPERA Cloud data platform the GraphQL APIs expose. |
+| **DPAPI** | Windows Data Protection API, used to encrypt credentials at rest. |
+| **`resvNameId`** | Reservation ID — the join key between reservation statistics and financial transactions. |
+| **Delta / Full Refresh** | Delta = changed-since extraction; Full = complete reload of a data set. |
+
+## Assumptions & Constraints
+
+- **A-01** The target hotels are provisioned on **R&A Platform v24.4+** and **OHIP Platform v24.3+**, and are subscribed to the R&A Data APIs / GraphQL Plan in the OHIP Developer Portal.
+- **A-02** The R&A Data API is **GraphQL over a single HTTPS POST endpoint** (`<gatewayUrl>/rna/v1/graphql/`); it does **not** provide REST resources or cursor/offset pagination.
+- **A-03** Every query **requires** mandatory filters (`resort` `_in` + a date range); open-ended queries are rejected by the platform.
+- **A-04** The solution runs on **PowerShell 7.x** on Windows, with DPAPI available for credential encryption under the executing service account.
+- **A-05** A reachable **Microsoft SQL Server** instance and database are available, and the executing account has DDL rights (tables are created idempotently).
+- **A-06** OAuth uses the `client_credentials` grant with the fixed scope `urn:opc:hgbu:ws:_myscopes_`.
+- **A-07** Each hotel's local time zone is configured; source datetimes may be local and must be normalised to UTC on store.
+- **A-08** Runs are scheduled (Task Scheduler / SQL Agent) and default to the previous business date when no range is supplied.
+- **A-09** SMTP relay details are shared across hotels via `Config\settings.json`; recipient lists are per-hotel in `Config\hotels.json`.
+
+## Out of Scope
+
+- **OOS-01** Real-time / streaming ingestion — the loader is batch and snapshot oriented.
+- **OOS-02** Write-back to OPERA Cloud; the solution is read-only against OHIP.
+- **OOS-03** Reporting, dashboards, or BI visualisation on top of the SQL Server tables.
+- **OOS-04** Non-R&A OHIP domains (e.g. transactional Reservation/Profile REST APIs) beyond what is needed for the listed Subject Areas.
+- **OOS-05** Automated provisioning of OHIP credentials, app keys, or Developer Portal subscriptions.
+- **OOS-06** Data-quality remediation beyond flagging and logging (e.g. correcting source records in OPERA).
+
+## Traceability
+
+Requirements map forward to `design.md` (components) and `tasks.md` (implementation tasks). Each requirement ID (`REQ-001`…`REQ-016`) is the stable reference used across all three spec documents; tasks cite the REQ IDs they satisfy. When a requirement changes, update the corresponding design component and re-verify the tasks that reference it.
+
+| Requirement | Primary Module(s) | Notes |
+|-------------|-------------------|-------|
+| REQ-001, REQ-002 | `Config`, `Tools\Protect-HotelsConfig.ps1` | Per-hotel config + credential encryption |
+| REQ-003 | `Modules\Auth.psm1` | OAuth token acquisition, cache, refresh |
+| REQ-004 | `Modules\Queries\ReservationStats.psm1` | Actual reservation statistics |
+| REQ-005 | `Modules\Queries\FinancialTransactions.psm1` | Actual financial transactions |
+| REQ-006 | `Modules\Queries\OnTheBooks.psm1` | OTB snapshot |
+| REQ-007 | `Modules\Queries\BlockReservations.psm1` | Block snapshot |
+| REQ-008 | `Modules\Queries\RoomInventory.psm1` | Room inventory |
+| REQ-009 | `Modules\Queries\MasterData.psm1` | Master data lists + SCD2 |
+| REQ-010 | `Modules\SqlWriter.psm1`, `SQL\*.sql` | Storage, MERGE upserts, DDL |
+| REQ-011 | `Modules\ApiClient.psm1` | Rate limiting, retry, chunking |
+| REQ-012, REQ-016 | `Modules\Logger.psm1` | Logging + severity-based email |
+| REQ-013 | `Run-OperaRALoader.ps1` | Modes, parameters, exit codes |
+| REQ-014 | `Modules\DateHelper.psm1` | Business date + UTC handling |
+| REQ-015 | `Run-OperaRALoader.ps1`, `Modules\Logger.psm1` | NoData status, FailFast |
