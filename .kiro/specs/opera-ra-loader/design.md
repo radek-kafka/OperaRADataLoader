@@ -1,6 +1,20 @@
 # Design: OPERA R&A Data Loader
 
-## Architecture Overview
+## Overview
+
+This document describes the technical design for the OPERA R&A Data Loader — a PowerShell 7 solution that extracts data from the Oracle Hospitality Integration Platform (OHIP) R&A Data APIs (GraphQL) and lands it in Microsoft SQL Server for multiple hotels across multiple chains. It realises the requirements defined in `requirements.md` (`REQ-001`…`REQ-016`).
+
+The design favours a modular structure: a single orchestrator (`Run-OperaRALoader.ps1`) drives per-hotel processing, delegating to focused modules for authentication, HTTP/GraphQL transport, per-subject-area extraction, date/time handling, SQL persistence, and logging/alerting. Key design principles:
+
+- **Per-hotel isolation** — one hotel's failure does not abort the batch (unless `-FailFast`).
+- **Idempotent loads** — all writes use staging + `MERGE` (upsert); master data uses SCD Type 2 history.
+- **Snapshot preservation** — daily forward-looking snapshots (OTB, blocks) accumulate keyed by `SNAPSHOT_DATE` and are never overwritten.
+- **Secure by default** — credentials encrypted at rest (DPAPI), masked in logs, least-privilege SQL account.
+- **Resilience** — token refresh, retry with exponential backoff, date-range chunking for volume control.
+
+See the **Requirements Traceability** section at the end for the design-component → requirement mapping.
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -111,6 +125,7 @@ POST  <gatewayUrl>/rna/v1/graphql/
 consistency with other OHIP APIs.
 
 ### Required Headers
+
 | Header          | Value                                                        |
 |-----------------|--------------------------------------------------------------|
 | `Authorization` | `Bearer <access_token>`                                      |
@@ -201,7 +216,7 @@ Scope and rules:
 
 ---
 
-## Module Design
+## Components and Interfaces
 
 ### Auth.psm1
 Manages per-hotel OAuth 2.0 token lifecycle against OCIM.
@@ -814,7 +829,7 @@ Channels GraphQL field → SQL column mapping (ExportMappings, DISTRIBUTION CHAN
 
 ---
 
-## SQL Server Schema
+## Data Models
 
 ### dbo.LoadLog
 ```sql
@@ -1220,6 +1235,7 @@ Run-OperaRALoader.ps1
 ```
 
 ### Mode Behaviour Matrix
+
 | Mode        | RES Stats | FIN Tx | OTB Snapshot | Block Snapshot | Room Inventory | Master Data |
 |-------------|-----------|--------|--------------|----------------|----------------|-------------|
 | Delta       | ✓         | ✓      | ✓            | ✓              | ✓              | —           |
@@ -1239,7 +1255,7 @@ Run-OperaRALoader.ps1
 
 ---
 
-## Error Handling Strategy
+## Error Handling
 - **HTTP 401**: clear token cache, re-authenticate once using `urn:opc:hgbu:ws:_myscopes_` scope, retry.
 - **HTTP 429 / 5xx**: exponential backoff (2 s base, ×2 per attempt, 30 s cap, 3 retries max).
 - **GraphQL `errors` array present but `data` not null**: log each error as WARN, continue processing partial data.
@@ -1250,3 +1266,223 @@ Run-OperaRALoader.ps1
 - **Missing data**: `NoData` status in `dbo.LoadLog`; not treated as error.
 - **SCD Type 2 conflict**: on master data change, close existing record (`ValidTo = today - 1`, `IsCurrent = 0`) and insert new version.
 - **Exit codes**: 0 = all hotels success; 1 = partial failure; 2 = total failure.
+
+---
+
+## Correctness Properties
+
+Universal invariants the loader must uphold across all valid inputs — every run, every hotel, every date. Each is a property-style statement traceable to the requirement it satisfies; the example-based tests in the Testing Strategy sample these properties.
+
+### Property 1: Re-run idempotency
+For any mode and any date range, WHEN the same load runs more than once, THE SYSTEM SHALL leave the target tables in the same state as a single run (no duplicate rows), via staging → `MERGE` on each table's natural key.
+
+**Validates: Requirements 10.1** (REQ-010)
+
+### Property 2: Snapshot preservation
+For any daily snapshot (OTB, BLK), WHEN a new snapshot is written, THE SYSTEM SHALL preserve all prior snapshots by using insert-only MERGEs keyed on `SNAPSHOT_DATE`.
+
+**Validates: Requirements 6.1, 7.1** (REQ-006, REQ-007)
+
+### Property 3: Join-key integrity
+For any financial-transaction row, THE SYSTEM SHALL carry `RESORT + BUSINESS_DATE + RESV_NAME_ID` so it joins back to `ra.RES`, backfilling a blank `RESORT` from the hotel code rather than leaving it empty.
+
+**Validates: Requirements 4.1, 5.1** (REQ-004, REQ-005)
+
+### Property 4: Audit completeness
+For any persisted row in any table, THE SYSTEM SHALL populate the audit columns `BATCH_ID`, `LOADED_AT`, and `LOADED_BY`.
+
+**Validates: Requirements 10.1** (REQ-010)
+
+### Property 5: UTC normalisation
+For any datetime that has a UTC counterpart, THE SYSTEM SHALL convert it from the hotel's local time zone such that a local → UTC → local round-trip yields the original instant across DST boundaries, and SHALL preserve the local value verbatim when no time zone is configured.
+
+**Validates: Requirements 14.1** (REQ-014)
+
+### Property 6: Business-date grounding
+For any hotel, THE SYSTEM SHALL anchor extraction date logic to the night-audit business date rather than wall-clock midnight, and SHALL treat a missing time zone as a hard error.
+
+**Validates: Requirements 14.2** (REQ-014)
+
+### Property 7: Late-posting classification
+For any financial transaction, THE SYSTEM SHALL set `IS_LATE_POSTING = 1` if and only if `TRX_DATE > BUSINESS_DATE`, and `0` otherwise.
+
+**Validates: Requirements 5.2** (REQ-005)
+
+### Property 8: Output vs filter date formats never mix
+For any emitted row and any request filter, THE SYSTEM SHALL format output dates as `YYYYMMDD` / `YYYYMMDD HH:mm:ss` and GraphQL request-filter dates as ISO `YYYY-MM-DD`, never mixing the two.
+
+**Validates: Requirements 4.1, 5.1, 6.1, 7.1, 8.1** (REQ-004, REQ-005, REQ-006, REQ-007, REQ-008)
+
+### Property 9: SCD Type 2 monotonicity
+For any master-data natural key, THE SYSTEM SHALL keep at most one row with `IS_CURRENT = 1`, closing the current row (`VALID_TO`, `IS_CURRENT = 0`) and inserting a new version on a tracked change, and performing no write when unchanged (treating NULL and empty string as equal).
+
+**Validates: Requirements 9.1** (REQ-009)
+
+### Property 10: SourceCodes and Channels stay independent
+For any master-data load, THE SYSTEM SHALL keep SourceCodes and Channels as independent lists in separate target tables, treating an empty SourceCodes list as an error and an empty Channels list as a benign skip.
+
+**Validates: Requirements 9.2** (REQ-009)
+
+### Property 11: Bounded retries
+For any transient API failure (429/5xx), THE SYSTEM SHALL retry with capped exponential backoff up to `maxRetries` and then surface an error, never retrying indefinitely.
+
+**Validates: Requirements 11.1** (REQ-011)
+
+### Property 12: Fail-partial, not fail-whole
+For any batch of hotels, WHEN one hotel fails, THE SYSTEM SHALL continue processing the others unless `-FailFast` is set, and SHALL return exit code 0 (all success), 1 (partial), or 2 (total failure) accordingly.
+
+**Validates: Requirements 13.1, 15.1** (REQ-013, REQ-015)
+
+### Property 13: Empty is not error
+For any expected-but-empty API result, THE SYSTEM SHALL record a `NoData` status in `dbo.LoadLog` and continue, never treating it as a failure.
+
+**Validates: Requirements 15.2** (REQ-015)
+
+### Property 14: DryRun writes nothing
+For any run invoked with `-DryRun`, THE SYSTEM SHALL execute queries but call no writer and change no target-table state.
+
+**Validates: Requirements 13.2** (REQ-013)
+
+### Property 15: Secrets never surface
+For any log line or emailed content, THE SYSTEM SHALL keep credentials and tokens DPAPI-encrypted at rest and masked (`****`) in output, and SHALL report a decryption failure without echoing the encrypted or plaintext value.
+
+**Validates: Requirements 2.4, 12.1, 16.1** (REQ-002, REQ-012, REQ-016)
+
+---
+
+## Testing Strategy
+
+Tests use **Pester** (PowerShell's test framework) and live in the `Tests\` folder, one spec file per module. External dependencies (OHIP HTTP calls, SQL Server, SMTP, DPAPI) are mocked so the suite runs offline and deterministically in CI.
+
+Every module is exercised through **injected scriptblock seams** (`-TokenRequest`, `-Invoker`, `-TokenProvider`, `-Sleep`, `-SubjectAreaInvoker`, `-SqlExecutor`, `-BulkCopy`, `-CurrentVersionLookup`, `-Encryptor`/`-Verifier`, `-ConfigResolver`, etc.) so no network, SQL Server, SMTP, or real waiting is required. `Run-OperaRALoader.ps1` and `Protect-HotelsConfig.ps1` are dot-sourced with a `*_NO_MAIN=1` environment flag so only their reusable functions load (the procedural main body is skipped). DPAPI-dependent assertions are `-Skip`ped on non-Windows hosts.
+
+### Test Coverage by Module
+
+**`Auth.Tests.ps1` → `Auth.psm1`** (REQ-002, REQ-003)
+- Exports `Get-OAuthToken` / `Clear-TokenCache`.
+- First call acquires a token; second call reuses the cache (no second request).
+- Re-acquires when the cached token falls inside the safety margin (`expires_in` 30 s vs 60 s margin); `-ForceRefresh` bypasses a still-valid token.
+- `Clear-TokenCache` forces re-auth on the next call (401 recovery); clearing an unknown hotel is a no-op.
+- Decrypts `clientId`/`clientSecret` into a `client_credentials` form body with the fixed `urn:opc:hgbu:ws:_myscopes_` scope, POSTed to `<gatewayUrl>/oauth/token` as `application/x-www-form-urlencoded`.
+- Decrypts DPAPI **CU-tagged**, **LM-tagged**, and **legacy untagged** credential forms (back-compat).
+- Throws a non-sensitive error when a credential cannot be decrypted, and when the token response has no `access_token`.
+
+**`ApiClient.Tests.ps1` → `ApiClient.psm1`** (REQ-003, REQ-011)
+- Exports `Invoke-GraphQL`, `Invoke-RASubjectArea`, `Invoke-RAApi`.
+- Injects headers: `Authorization: Bearer`, `x-app-key`, `Content-Type`, `Accept`, `x-hotelid`, and a **new `x-request-id` GUID per request**; POSTs to `<gatewayUrl>/rna/v1/graphql/` with a JSON body carrying `query` + `variables`.
+- HTTP 401 → clear cache, re-auth once, retry; throws if 401 persists (exactly 2 attempts).
+- Exponential backoff on 429/5xx: delays `2,4,8` then throw (4 attempts); caps at `retryMaxDelaySeconds`; recovers when a transient 500 is followed by success.
+- GraphQL `errors` array: WARN + return when `data` is non-null; **throw when `data` is null**.
+- `Invoke-RASubjectArea` throttles *between* chunks only (not before the first), flattens all chunks into one real `[object[]]`, and defensively follows a `nextPageToken` if returned.
+
+**`DateHelper.Tests.ps1` → `DateHelper.psm1`** (REQ-014)
+- DST-aware `Convert-ToUtc`: +1 h in winter (CET), +2 h in summer (CEST); round-trips winter/summer UTC instants through `Convert-ToLocal | Convert-ToUtc`.
+- `Get-BusinessDate` midnight cutover returns local-yesterday; falls back to midnight when `nightAuditHour` is absent; **throws when `timeZoneId` is missing**.
+- (Date chunking + `Format-OutputDate` are additionally exercised through the query-module tests.)
+
+**`SqlWriter.Tests.ps1` → `SqlWriter.psm1`** (REQ-009, REQ-010)
+- Table specs: RES natural key `RESORT+BUSINESS_DATE+RESV_NAME_ID+MARKET_CODE+ROOM_CATEGORY_LABEL`; FIN `RESORT+BUSINESS_DATE+TRX_NO+TRAN_ACTION_ID`; OTB key includes `SNAPSHOT_DATE`; `DIM_SourceCodes`/`DIM_Channels` resolve to independent targets.
+- `Initialize-Database` runs the five DDL scripts in numeric order (001..005), split on standalone `GO`.
+- `New-MergeStatement` maps every column, keys on the natural key, stamps `BATCH_ID`/`LOADED_AT`/`LOADED_BY`, emits `OUTPUT $action`.
+- `Get-IsLatePosting` / `Get-IsPastCutoff` flag logic, and `Write-FIN`/`Write-BLK` compute the flags during mapping.
+- OTB/BLK are **insert-only MERGEs** (`WHEN NOT MATCHED BY TARGET`, no `WHEN MATCHED UPDATE`) so prior snapshots are preserved.
+- SCD2 (`Write-DIM`): insert new current version for a new code; expire (`VALID_TO`, `IS_CURRENT=0`) + insert on a tracked change; no-op when unchanged; NULL and empty string treated as equal.
+- SourceCodes (required) writes only to `ra.DIM_SourceCodes`; empty Channels payload is a benign no-op. `ra.Hotels` upserts in place (no versioning). `Write-LoadLog` uses the real DDL columns (`StartTime`/`EndTime`/`[RowCount]`, not `StartedAt`/`DurationMs`). MERGE failure rethrows.
+
+**`Logger.Complete-Batch.Tests.ps1` → `Logger.psm1`** (REQ-012, REQ-015)
+- `Complete-Batch` with SqlLogging disabled: no throw, writes the INFO summary (`Status=`, `RowsFetched/Inserted/Updated=`, BatchId), renders omitted counts as `<n/a>`, logs a DEBUG "SqlLogging disabled".
+- `-Status` is constrained by `ValidateSet` (rejects `Bogus`; accepts `Success`/`NoData`/`Error`/`Partial`).
+- SqlLogging enabled with no connection string: WARN "no SQL connection string is configured", never throws.
+- *(Scope note: this file covers `Complete-Batch` non-SQL paths only; `Send-AlertEmail` / severity-based email of REQ-016 is designed but not yet covered by an automated test.)*
+
+**`ReservationStats.Tests.ps1` → `Queries\ReservationStats.psm1`** (REQ-004)
+- 7-day chunking (20-day range → 3 chunks), `-ChunkDays` override, and `extraction.transactionalChunkDays` from Config; **ISO `YYYY-MM-DD` request filters** (`resort._in`, `businessDate._gte/_lte`); operation `statisticsReservationsDaily` / primary view `reservationDailyStatisticsDetails`.
+- Maps key `ra.RES` fields; empty/whitespace source values → `$null`; blank `RESORT` backfilled from hotel code.
+- Output formatting: date-only → `YYYYMMDD`, datetime → `YYYYMMDD HH:mm:ss`, empty date → empty string.
+- ADR = Revenue/RoomNights, RevPAR = Revenue/PhysicalRooms; does not overwrite API-supplied values; divide-by-zero and missing-denominator → `$null`.
+- Multi-chunk accumulation to a flat array (empty → empty array, not `$null`); one INFO row-count+duration log line per chunk.
+
+**`FinancialTransactions.Tests.ps1` → `Queries\FinancialTransactions.psm1`** (REQ-005)
+- Same chunking/ISO-filter/operation assertions as RES (operation & view `financialTransactionDetails`).
+- Maps key `ra.FIN` fields (`RESV_NAME_ID`, `TRX_NO`, `TRAN_ACTION_ID`, `TRX_NO_ADDED_BY`, `TC_GROUP`, `FT_SUBTYPE`, amounts…); `COSTCENTER`/`ACCOUNT` set `$null` (not in this SA); blank `RESORT` backfilled.
+- `TRX_DATE` (local) → `TRX_DATE_UTC` via `timeZoneId` (CEST 10:00 → 08:00 UTC); falls back to local when no timezone; `YYYYMMDD HH:mm:ss` formatting; empty dates → empty string.
+- `IS_LATE_POSTING` late/same-day/early; a **single WARN carrying the late-posting count** only when late postings exist.
+
+**`OnTheBooks.Tests.ps1` → `Queries\OnTheBooks.psm1`** (REQ-006)
+- Derives `consideredDate` range from the snapshot horizon (`+FutureDays`), ISO filters, operation `statisticsForecastSummary` / view `forecastSummaryDetails`.
+- `SNAPSHOT_DATE` from `-SnapshotDate`, `CONSIDERED_DATE` from response `stayDate`; `YYYYMMDD` formatting; blank `RESORT` backfilled.
+- `ADR_ON_BOOKS` = ROOM_REVENUE/NO_ROOMS (divide-by-zero → `$null`, API value not overwritten); TENTATIVE/DEFINITE split by reservation status; one INFO "OTB snapshot complete" log with snapshot/considered-range/row count.
+
+**`BlockReservations.Tests.ps1` → `Queries\BlockReservations.psm1`** (REQ-007)
+- Snapshot horizon over `blockFutureDays` (falls back to hotel config), ISO filters, operation `bookingsBlock` / view `blockDetails`.
+- Maps key `ra.BLK` fields; `SNAPSHOT_DATE` from `-SnapshotDate`, `CONSIDERED_DATE`/`CUTOFF_DATE` from response as `YYYYMMDD`; blank `RESORT` backfilled.
+- `ROOMS_REMAINING` = contracted − pickedup (null-guarded, API value not overwritten); `IS_PAST_CUTOFF` past/on/after cutoff; single WARN with past-cutoff count; returns an array for a single row; exposes `Get-BLK` alias.
+
+**`RoomInventory.Tests.ps1` → `Queries\RoomInventory.psm1`** (REQ-008)
+- OOO (`statisticsManagersReport`) 7-day chunking + ISO filters; RMN (`inventoryRooms`) is a **single static request with no `businessDate` filter**.
+- OOO mapping (`OOO_ROOMS`/`OS_ROOMS`/`ROOM_CLASS`/`PHYSICAL_BEDS`, `BUSINESS_DATE` as `YYYYMMDD`); RMN mapping (`ROOM`/`ROOM_CATEGORY_LABEL`/`ROOM_CLASS`/`ROOM_STATUS`); blank `RESORT` backfilled; missing counts → `$null`.
+- `AVAIL_ROOM` = physical − OOO − OS (API value not overwritten; null-guarded); a range crossing today is chunked uniformly (past + future in one call); `Get-RoomInventory` returns a hashtable with `RMN` and `OOO` arrays (arrays even for a single row).
+
+**`MasterData.Tests.ps1` → `Queries\MasterData.psm1`** (REQ-009)
+- Routes each `-Type` to its SA operation; ExportMappings dimensions share the SA but use distinct `mappingType` discriminators (`MARKET`/`SOURCE`/`CHANNEL`).
+- SourceCodes and Channels map to separate targets and never cross-contaminate; full refresh omits `changedSince`, delta adds an ISO `changedSince._gte` filter.
+- Key-field mappings for all 7 types (TrxCodes, RoomTypeLabels, RateCodes, MarketCodes, SourceCodes, Channels, Hotels), incl. `activeYn=N` → `IS_ACTIVE=0`/`FLAG='Y'`.
+- **SourceCodes empty → throws** (required); **Channels empty → benign skip** (optional). Change detection logs NEW / DESCRIPTION-changed / DEACTIVATED via `-CurrentRecordsProvider`.
+
+**`Protect-HotelsConfig.Tests.ps1` → `Tools\Protect-HotelsConfig.ps1`** (REQ-002, REQ-016)
+- Encrypts `clientId`/`clientSecret`/`apiKey` while copying all other fields (incl. nested `emailAlerts`) verbatim; preserves top-level siblings and hotels-array count.
+- Round-trip verify returns ciphertext on match; **aborts (throws, no output) on round-trip mismatch**.
+- Real DPAPI (Windows) round-trips `Protect-DpapiValue`/`Unprotect-DpapiValue` and produces `DPAPI:CU:` / `DPAPI:LM:` tags.
+- Plaintext secrets never appear in the verbose stream; `Protect-SmtpSettings` encrypts `smtp.username`/`password` only; `Test-DpapiEncrypted` recognises tagged/legacy forms and rejects plaintext (idempotency).
+
+**`RunOperaRALoader.Tests.ps1` → `Run-OperaRALoader.ps1`** (REQ-001, REQ-013, REQ-015)
+- Parameter surface: `-Mode` `ValidateSet` (All/Full/Delta/OTB/MasterData); all documented params declared; throws when `StartDate` > `EndDate`.
+- `Resolve-Config` fail-fast on missing `connectionString`, missing hotel field (`clientSecret`), or empty hotels array; returns Settings+Hotels for a valid config.
+- `Select-Hotels` excludes disabled hotels, filters case-insensitively by `-HotelCode` and by `-ChainCode`, returns empty on no match.
+- `Get-RunExitCode`: 0 all-success, 1 partial, 2 total, 0 when none processed. `Get-ModeQuerySet` matches the mode matrix (MasterData→DIM only; OTB→OTB/BLK/RMN; Delta→no DIM; Full/All→DIM+actuals+snapshots).
+- `-DryRun` runs queries but calls **zero writers**; without it, writers are called. `Write-SummaryTable` renders Hotel/Status/Rows/Duration; end-to-end `Invoke-Loader` isolates a per-hotel failure (partial, exit 1) and stops after the first failure under `-FailFast` (exit 2). `Test-HotelCredentials` reports failure without leaking the encrypted value.
+
+### Test Levels
+- **Unit** — pure functions (date math, flag computation, mapping, key construction, exit-code logic) with no I/O.
+- **Module behaviour (seam-injected)** — a module driven through its scriptblock seams with canned GraphQL/DB responses, asserting the field → column contract, request filters, and side effects (logging, WARN counts) with zero network/SQL.
+- **End-to-end (manual / gated)** — a single hotel against a non-production OHIP environment, run outside CI, to validate live schema field names via GraphQL introspection (`__type`).
+
+### Running the Suite
+```powershell
+Invoke-Pester -Path .\Tests -Output Detailed
+```
+Pester 5.0+ is required (the Logger test notes it is validated on Pester 6.x). The suite runs cross-platform; DPAPI credential tests self-skip on non-Windows hosts.
+
+### Known Coverage Gaps
+- **REQ-016 email delivery** — `Send-AlertEmail` (severity gating, per-hotel recipients, log attachment, delivery-failure-never-aborts) has no automated test yet; only `Complete-Batch`'s non-SQL paths are covered in `Logger.Complete-Batch.Tests.ps1`.
+- **Live SQL** — `SqlWriter` MERGE/SCD2 behaviour is asserted against a recording fake executor, not a live database; a live-SQL smoke test is skipped when no server is reachable.
+
+### Verification Principles
+- Every requirement with observable behaviour (mapping, keys, flags, exit codes, masking) has at least one assertion.
+- Field → column mappings are cross-checked against the sample CSVs in `CSVSampleSpec\` where available.
+- Live schema field names are confirmed by GraphQL introspection before trusting mappings, since OHIP schema names can vary by release.
+
+---
+
+## Requirements Traceability
+
+Each design element realises one or more requirements from `requirements.md`. When a requirement changes, update the mapped component here and re-verify the associated tests.
+
+| Requirement | Design Section / Component |
+|-------------|----------------------------|
+| REQ-001 Multi-Hotel Config | Configuration Schema (`hotels.json`), Entry Point Parameters (`-HotelCode`/`-ChainCode`) |
+| REQ-002 Secure Credentials | Security Considerations, `Tools\Protect-HotelsConfig.ps1` |
+| REQ-003 Authentication | Components and Interfaces → `Auth.psm1`, OHIP API Technical Reference (OAuth) |
+| REQ-004 Reservation Stats | `Queries\ReservationStats.psm1`, `ra.RES` schema |
+| REQ-005 Financial Tx | `Queries\FinancialTransactions.psm1`, `ra.FIN` schema |
+| REQ-006 On-The-Books | `Queries\OnTheBooks.psm1`, `ra.OTB` schema |
+| REQ-007 Block Reservations | `Queries\BlockReservations.psm1`, `ra.BLK` schema |
+| REQ-008 Room Inventory | `Queries\RoomInventory.psm1`, `ra.RMN` / `ra.OOO` schema |
+| REQ-009 Master Data | `Queries\MasterData.psm1`, `ra.DIM_*` schema (SCD2) |
+| REQ-010 SQL Storage | Data Models, `SqlWriter.psm1`, `SQL\*.sql` |
+| REQ-011 Rate Limiting & Resilience | `ApiClient.psm1`, Error Handling |
+| REQ-012 Logging & Monitoring | `Logger.psm1`, `dbo.LoadLog` schema |
+| REQ-013 Scheduling & Modes | Entry Point Parameters, Mode Behaviour Matrix |
+| REQ-014 Time Zone Handling | `DateHelper.psm1`, output date formatting |
+| REQ-015 Fallback & Missing Data | Error Handling (NoData, per-hotel isolation, `-FailFast`) |
+| REQ-016 Email Notifications | `Logger.psm1` (`Send-AlertEmail`), Configuration Schema (`emailAlerts`, `smtp`) |
